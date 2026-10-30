@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Daily lists')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+
+    <div class="page-head">
+        <div>
+            <h1 th:text="${a != null} ? 'Top ' + ${topN} + ' lists · ' + ${@fmt.day(a.date)} : 'Top lists'">Top 20 lists</h1>
+            <p>Where the money went today, how unusual it was, and whether the price agreed with the volume.</p>
+        </div>
+        <form class="inline" method="get" th:action="@{/}" th:if="${!sessions.isEmpty()}">
+            <label for="date" class="muted">Session</label>
+            <select id="date" name="date" onchange="this.form.submit()">
+                <option th:each="d : ${sessions}" th:value="${d}" th:text="${@fmt.day(d)}"
+                        th:selected="${a != null and d == a.date}"></option>
+            </select>
+        </form>
+    </div>
+
+    <div th:if="${a == null}" class="card empty">
+        <h2>No data yet</h2>
+        <p>The crawler stores the first session after the next market close (Mon–Fri after 15:15 Nepal time).<br>
+            You can also run it now from <a th:href="@{/crawl}">Data &amp; crawler</a>.</p>
+    </div>
+
+    <th:block th:if="${a != null}">
+
+        <div class="note" th:if="${a.historySessions < minHistory}">
+            Building history: <b th:text="${a.historySessions}">0</b> earlier session(s) stored.
+            Relative volume (RVOL) and the Accumulation / Distribution signals need at least
+            <b th:text="${minHistory}">5</b> earlier sessions, and are most reliable after 20.
+            Until then the signal shows only the price direction.
+        </div>
+
+        <div class="tiles">
+            <div class="card tile">
+                <div class="k">Market turnover</div>
+                <div class="v" th:text="'Rs ' + ${@fmt.money(a.marketTurnover)}">Rs 0</div>
+                <div class="s" th:if="${a.marketTurnoverVsAvg != null}">
+                    <span th:class="${@fmt.tone(a.marketTurnoverVsAvg - 1)}" th:text="${@fmt.ratio(a.marketTurnoverVsAvg)}"></span> its 20-session average
+                </div>
+                <div class="s" th:unless="${a.marketTurnoverVsAvg != null}" th:text="${a.stockCount} + ' stocks traded'"></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Top <span th:text="${topN}"></span> share of turnover</div>
+                <div class="v" th:text="${@fmt.share(a.topTurnoverShare)}">0%</div>
+                <div class="s">Higher = money concentrated in a few stocks</div>
+            </div>
+            <div class="card tile">
+                <div class="k">Accumulation / Distribution</div>
+                <div class="v"><span class="pos" th:text="${a.count(T(com.nepse.topturnover.analysis.Signal).ACCUMULATION)}">0</span>
+                    / <span class="neg" th:text="${a.count(T(com.nepse.topturnover.analysis.Signal).DISTRIBUTION)}">0</span></div>
+                <div class="s">in the top-turnover list</div>
+            </div>
+            <div class="card tile">
+                <div class="k">New entries</div>
+                <div class="v" th:text="${a.newEntries()}">0</div>
+                <div class="s">not in the turnover list in the previous 10 sessions</div>
+            </div>
+            <div class="card tile">
+                <div class="k">In both lists</div>
+                <div class="v" th:text="${a.inBoth()}">0</div>
+                <div class="s">top <span th:text="${topN}"></span> by turnover and by volume</div>
+            </div>
+        </div>
+
+        <div class="stack">
+            <section class="card">
+                <h2>Top <span th:text="${topN}"></span> by turnover</h2>
+                <p class="sub">Where the rupees went. Ranked by traded value.</p>
+                <div th:replace="~{fragments/lists :: listTable(${a.turnover}, 'TURNOVER')}"></div>
+            </section>
+
+            <section class="card">
+                <h2>Top <span th:text="${topN}"></span> by volume</h2>
+                <p class="sub">Most shares traded. Favours low-priced stocks, so read it together with the turnover list.</p>
+                <div th:replace="~{fragments/lists :: listTable(${a.volume}, 'VOLUME')}"></div>
+            </section>
+
+            <section class="card">
+                <h2>How to read the lists</h2>
+                <div class="grid-2" style="margin-top:10px">
+                    <ul class="howto">
+                        <li><b>RVOL</b>: today's volume ÷ the stock's average over the previous 20 sessions. Above 1.5× is unusual activity.</li>
+                        <li><b>Close in range</b>: where the close sits between the day's low and high. Green = closed in the top quarter (buyers held control), red = bottom quarter.</li>
+                        <li><b>Avg trade</b>: turnover ÷ number of transactions. Large and rising suggests bigger investors; one or two huge trades suggest a block deal.</li>
+                        <li><b>Streak</b> and <b>last 10</b>: how persistently the stock stays in the list. Persistence matters more than one day's rank.</li>
+                        <li><span class="tag new">new</span> first appearance in 10 sessions. <span class="tag both">both</span> also in the other list.</li>
+                    </ul>
+                    <div class="legend">
+                        <div th:each="s : ${signals}">
+                            <span class="pill" th:classappend="${s.tone}" th:text="${s.label}"></span>
+                            <span th:text="${s.meaning}"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </th:block>
+
+
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

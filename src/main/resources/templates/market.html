@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Market activity')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Market activity</h1>
+            <p>Total turnover against its 20-session average, and how much of it the top <span th:text="${topN}"></span> stocks take.
+                Rising turnover means new money entering; rising concentration means it is chasing fewer stocks.</p>
+        </div>
+        <span class="seg">
+            <a th:each="n : ${ {20, 60, 120, 250} }" th:href="@{/market(days=${n})}" th:classappend="${days == n} ? 'on'" th:text="${n} + ' sessions'"></a>
+        </span>
+    </div>
+
+    <div th:if="${rows.isEmpty()}" class="card empty">No data yet. See <a th:href="@{/crawl}">Data &amp; crawler</a>.</div>
+
+    <th:block th:unless="${rows.isEmpty()}">
+        <div class="grid-2">
+            <section class="card">
+                <h2>Market turnover (Rs crore)</h2>
+                <p class="sub">Bars: daily turnover · line: 20-session average</p>
+                <div class="chart-box"><canvas id="turnoverChart"></canvas></div>
+            </section>
+            <section class="card">
+                <h2>Top <span th:text="${topN}"></span> share</h2>
+                <p class="sub">Share of the day's turnover and volume taken by the top-<span th:text="${topN}"></span> lists</p>
+                <div class="chart-box"><canvas id="shareChart"></canvas></div>
+            </section>
+        </div>
+
+        <section class="card" style="margin-top:16px">
+            <h2>Daily totals</h2>
+            <div class="table-wrap" style="margin-top:8px">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="num">Turnover (Rs)</th>
+                        <th class="num">vs 20-session avg</th>
+                        <th class="num">Volume</th>
+                        <th class="num hide-sm">Transactions</th>
+                        <th class="num hide-sm">Stocks traded</th>
+                        <th class="num">Top-<span th:text="${topN}"></span> turnover share</th>
+                        <th class="num">Top-<span th:text="${topN}"></span> volume share</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="i : ${#numbers.sequence(rows.size() - 1, 0, -1)}" th:with="r=${rows[i]}">
+                        <td><a th:href="@{/(date=${r.date})}" th:text="${@fmt.day(r.date)}"></a></td>
+                        <td class="num" th:text="${@fmt.money(r.turnover)}"></td>
+                        <td class="num" th:with="ratio=${r.turnoverAvg20 != null and r.turnoverAvg20 > 0} ? ${r.turnover / r.turnoverAvg20} : null"
+                            th:classappend="${ratio != null} ? ${@fmt.tone(ratio - 1)}" th:text="${@fmt.ratio(ratio)}"></td>
+                        <td class="num" th:text="${@fmt.count(r.volume)}"></td>
+                        <td class="num hide-sm" th:text="${@fmt.count(r.trades)}"></td>
+                        <td class="num hide-sm" th:text="${r.stockCount}"></td>
+                        <td class="num" th:text="${@fmt.share(r.topTurnoverShare)}"></td>
+                        <td class="num" th:text="${@fmt.share(r.topVolumeShare)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const rows = /*[[${chartRows}]]*/ [];
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                const c = n => css.getPropertyValue(n).trim();
+                Chart.defaults.color = c('--muted');
+                Chart.defaults.borderColor = c('--border');
+                const labels = rows.map(r => r.date);
+                new Chart(document.getElementById('turnoverChart'), {
+                    data: {
+                        labels,
+                        datasets: [
+                            { type: 'bar', label: 'Turnover', data: rows.map(r => r.turnover / 1e7), backgroundColor: c('--accent'), borderRadius: 3, maxBarThickness: 24 },
+                            { type: 'line', label: '20-session avg', data: rows.map(r => r.turnoverAvg20 == null ? null : r.turnoverAvg20 / 1e7),
+                              borderColor: c('--warn'), borderWidth: 2, pointRadius: 0, tension: 0.2 }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { y: { title: { display: true, text: 'Rs crore' } } } }
+                });
+                new Chart(document.getElementById('shareChart'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Turnover share', data: rows.map(r => r.topTurnoverShare == null ? null : r.topTurnoverShare * 100),
+                              borderColor: c('--accent'), borderWidth: 2, pointRadius: 2, tension: 0.2 },
+                            { label: 'Volume share', data: rows.map(r => r.topVolumeShare == null ? null : r.topVolumeShare * 100),
+                              borderColor: c('--pos'), borderWidth: 2, pointRadius: 2, tension: 0.2 }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } } }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -11,31 +11,32 @@ import java.util.regex.Pattern;
 
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.stereotype.Component;
 
+import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.model.MarketSnapshot;
 import com.nepse.topturnover.model.StockQuote;
 
 /**
- * Reads https://www.sharesansar.com/today-share-price.
- * The page has every traded stock with OHLC, volume, turnover and number of transactions.
- * Columns are located by header text, so a reordered table still parses.
+ * Reads https://www.sharesansar.com/today-share-price: every traded stock with OHLC, volume,
+ * turnover and number of transactions. Columns are located by header text, so a reordered
+ * table still parses. ShareSansar is the only source: its robots.txt allows crawling, while
+ * Merolagani's terms forbid any automated data collection.
  */
-public final class SharesansarCrawler implements SourceCrawler {
+@Component
+public class SharesansarCrawler {
     public static final String NAME = "sharesansar";
     private static final Pattern AS_OF = Pattern.compile("As of\\s*:?\\s*(\\d{4}-\\d{2}-\\d{2})");
 
     private final HttpFetcher http;
     private final String url;
 
-    public SharesansarCrawler(HttpFetcher http, String url) {
-        this.http = http;
-        this.url = url;
+    public SharesansarCrawler(NepseProperties props) {
+        NepseProperties.Crawl c = props.crawl();
+        this.http = new HttpFetcher(c.userAgent(), c.timeoutSeconds(), c.retries(), c.retryDelaySeconds());
+        this.url = c.url();
     }
 
-    @Override
-    public String name() { return NAME; }
-
-    @Override
     public MarketSnapshot crawl() throws CrawlException {
         return parse(http.get(url));
     }
@@ -71,7 +72,7 @@ public final class SharesansarCrawler implements SourceCrawler {
                     num(td, col, "open"), num(td, col, "high"), num(td, col, "low"), num(td, col, "close"),
                     num(td, col, "ltp"), num(td, col, "prev. close"), num(td, col, "vwap"),
                     num(td, col, "vol"), num(td, col, "turnover"), Numbers.toInt(num(td, col, "trans.")),
-                    num(td, col, "diff %"), false));
+                    num(td, col, "diff %")));
         }
         return new MarketSnapshot(tradeDate(doc), NAME, quotes);
     }

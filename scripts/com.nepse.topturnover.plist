@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keeps the NEPSE app running in the background on macOS (starts at login, restarts if it stops).
+  The app's own scheduler then crawls every trading day after the close.
+
+  Install:  cp scripts/com.nepse.topturnover.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.nepse.topturnover.plist
+  Remove:   launchctl unload ~/Library/LaunchAgents/com.nepse.topturnover.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nepse.topturnover</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Applications/Works/projectfiles/nepse-topturnover-analysis/scripts/run-app.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Applications/Works/projectfiles/nepse-topturnover-analysis</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Applications/Works/projectfiles/nepse-topturnover-analysis/logs/app.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Applications/Works/projectfiles/nepse-topturnover-analysis/logs/app.err.log</string>
+</dict>
+</plist>

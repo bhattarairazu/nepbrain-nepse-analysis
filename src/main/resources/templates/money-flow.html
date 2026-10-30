@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Money flow')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Money flow</h1>
+            <p>Stocks that keep coming back to the top <span th:text="${topN}"></span> are where money is consistently going.
+                One big day can be a block deal; repeated appearances are a trend.</p>
+        </div>
+        <div class="inline" style="display:flex;gap:10px;flex-wrap:wrap">
+            <span class="seg">
+                <a th:href="@{/money-flow(type='TURNOVER',days=${days})}" th:classappend="${type == 'TURNOVER'} ? 'on'">By turnover</a>
+                <a th:href="@{/money-flow(type='VOLUME',days=${days})}" th:classappend="${type == 'VOLUME'} ? 'on'">By volume</a>
+            </span>
+            <span class="seg">
+                <a th:each="n : ${ {5, 10, 20, 60} }" th:href="@{/money-flow(type=${type},days=${n})}"
+                   th:classappend="${days == n} ? 'on'" th:text="${n} + ' sessions'"></a>
+            </span>
+        </div>
+    </div>
+
+    <div th:if="${flow == null}" class="card empty">No data yet. See <a th:href="@{/crawl}">Data &amp; crawler</a>.</div>
+
+    <section class="card" th:if="${flow != null}">
+        <h2 th:text="${flow.sessionsUsed} + ' sessions · ' + ${@fmt.day(flow.from)} + ' → ' + ${@fmt.day(flow.to)}"></h2>
+        <p class="sub">
+            <span th:if="${flow.sessionsUsed < flow.sessionsRequested}"
+                  th:text="'Only ' + ${flow.sessionsUsed} + ' of ' + ${flow.sessionsRequested} + ' sessions stored so far. '"></span>
+            Sorted by appearances, then average rank. Price change runs from the close before the window to the latest close.
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Appearances</th>
+                    <th class="num">Avg rank</th>
+                    <th class="num">Best</th>
+                    <th class="num">Today</th>
+                    <th class="num" th:text="${type == 'TURNOVER'} ? 'Total turnover (Rs)' : 'Total volume'"></th>
+                    <th class="num">Last close</th>
+                    <th class="num">Price change</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${flow.rows}">
+                    <td class="sym"><a th:href="@{/stock/{s}(s=${r.symbol})}" th:text="${r.symbol}"></a><small th:text="${r.name}"></small></td>
+                    <td>
+                        <span class="bar" th:style="'width:' + ${r.appearances * 90 / flow.sessionsUsed} + 'px'"></span>
+                        <b th:text="' ' + ${r.appearances} + '/' + ${flow.sessionsUsed}"></b>
+                    </td>
+                    <td class="num" th:text="${@fmt.decimal(r.avgRank, 1)}"></td>
+                    <td class="num" th:text="${r.bestRank}"></td>
+                    <td class="num" th:text="${r.latestRank != null} ? '#' + ${r.latestRank} : '—'"></td>
+                    <td class="num" th:text="${type == 'TURNOVER'} ? ${@fmt.money(r.totalValue)} : ${@fmt.count(r.totalValue)}"></td>
+                    <td class="num" th:text="${@fmt.price(r.lastClose)}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(r.priceChangePct)}" th:text="${@fmt.pct(r.priceChangePct)}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" style="margin-top:16px" th:if="${flow != null}">
+        <h2>What to look for</h2>
+        <ul class="howto">
+            <li><b>Many appearances and rising price</b>: steady buying. These are the stocks to study on the chart.</li>
+            <li><b>Many appearances but falling price</b>: heavy trading while sellers win, often distribution.</li>
+            <li><b>Few appearances, one high rank</b>: a single big day, possibly a block deal. Check the stock page before reading anything into it.</li>
+            <li>Compare <b>by turnover</b> with <b>by volume</b>: a cheap stock can top the volume list with little money behind it.</li>
+        </ul>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

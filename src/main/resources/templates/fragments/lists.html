@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- One top-N list (turnover or volume) on the daily page -->
+    <th:block th:fragment="listTable(rows, type)">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th class="num">#</th>
+                    <th>Symbol</th>
+                    <th class="num" th:text="${type == 'TURNOVER'} ? 'Turnover (Rs)' : 'Volume'">Value</th>
+                    <th class="num" th:text="${type == 'TURNOVER'} ? 'Volume' : 'Turnover (Rs)'">Other</th>
+                    <th class="num">Close</th>
+                    <th class="num">Change</th>
+                    <th class="num">RVOL</th>
+                    <th>Close in range</th>
+                    <th class="num hide-sm">Avg trade</th>
+                    <th class="num hide-sm">Streak</th>
+                    <th class="num hide-sm">Last 10</th>
+                    <th>Signal</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="r : ${rows}">
+                    <td class="num rank" th:text="${r.rank}">1</td>
+                    <td class="sym">
+                        <a th:href="@{/stock/{s}(s=${r.symbol})}" th:text="${r.symbol}">SYM</a>
+                        <span class="tag new" th:if="${r.newEntry}">new</span>
+                        <span class="tag both" th:if="${r.inBothLists}">both</span>
+                        <small th:text="${r.name}" th:title="${r.name}"></small>
+                    </td>
+                    <td class="num"><b th:text="${type == 'TURNOVER'} ? ${@fmt.money(r.value)} : ${@fmt.count(r.value)}"></b></td>
+                    <td class="num muted" th:text="${type == 'TURNOVER'} ? ${@fmt.count(r.volume)} : ${@fmt.money(r.turnover)}"></td>
+                    <td class="num" th:text="${@fmt.price(r.close)}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(r.changePct)}" th:text="${@fmt.pct(r.changePct)}"></td>
+                    <td class="num" th:classappend="${r.rvol != null and r.rvol >= 1.5} ? 'pos'">
+                        <b th:if="${r.rvol != null}" th:text="${@fmt.ratio(r.rvol)}"></b>
+                        <span th:unless="${r.rvol != null}" class="muted" title="Needs more history">—</span>
+                    </td>
+                    <td>
+                        <span th:if="${r.closeInRange != null}" class="range"
+                              th:classappend="${r.closedNearHigh()} ? 'hi' : (${r.closedNearLow()} ? 'lo' : '')"
+                              th:title="${@fmt.share(r.closeInRange)} + ' of today’s high-low range'">
+                            <i th:style="'left:calc(' + ${#numbers.formatDecimal(r.closeInRange * 100, 1, 1)} + '% - 2px)'"></i>
+                        </span>
+                        <span th:unless="${r.closeInRange != null}" class="muted">—</span>
+                    </td>
+                    <td class="num hide-sm" th:text="${r.avgTradeSize != null} ? ${@fmt.money(r.avgTradeSize)} : '—'"></td>
+                    <td class="num hide-sm" th:text="${r.streak} + ' d'"></td>
+                    <td class="num hide-sm" th:text="${r.appearances10} + '/10'"></td>
+                    <td><span class="pill" th:classappend="${r.signal.tone}" th:text="${r.signal.label}" th:title="${r.signal.meaning}"></span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </th:block>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${symbol})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div th:if="${s == null}" class="card empty">
+        <h2 th:text="${symbol}"></h2>
+        <p>No data stored for this symbol.</p>
+    </div>
+
+    <th:block th:if="${s != null}">
+        <div class="page-head">
+            <div>
+                <h1 th:text="${s.symbol}">SYM</h1>
+                <p><span th:text="${s.name}"></span><span th:if="${s.sector != null}" th:text="' · ' + ${s.sector}"></span></p>
+            </div>
+            <span class="seg">
+                <a th:each="n : ${ {20, 60, 120, 250} }" th:href="@{/stock/{sym}(sym=${s.symbol},days=${n})}"
+                   th:classappend="${days == n} ? 'on'" th:text="${n} + ' sessions'"></a>
+            </span>
+        </div>
+
+        <div class="tiles" th:with="l=${s.latest()}">
+            <div class="card tile">
+                <div class="k">Last close</div>
+                <div class="v" th:text="${@fmt.price(l.close)}"></div>
+                <div class="s"><span th:class="${@fmt.tone(l.changePct)}" th:text="${@fmt.pct(l.changePct)}"></span> on <span th:text="${@fmt.day(l.date)}"></span></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Last turnover</div>
+                <div class="v" th:text="'Rs ' + ${@fmt.money(l.turnover)}"></div>
+                <div class="s" th:if="${s.days.size() > 5 and s.avgTurnover20 != null and s.avgTurnover20 > 0}">
+                    <span th:text="${@fmt.ratio(l.turnover / s.avgTurnover20)}"></span> its 20-session average
+                </div>
+            </div>
+            <div class="card tile">
+                <div class="k">In top-20 turnover</div>
+                <div class="v" th:text="${s.turnoverAppearances} + ' / ' + ${s.days.size()}"></div>
+                <div class="s">sessions shown</div>
+            </div>
+            <div class="card tile">
+                <div class="k">In top-20 volume</div>
+                <div class="v" th:text="${s.volumeAppearances} + ' / ' + ${s.days.size()}"></div>
+                <div class="s">sessions shown</div>
+            </div>
+        </div>
+
+        <section class="card">
+            <h2>Price and turnover</h2>
+            <p class="sub">Line: close · bars: turnover (darker when the stock was in the top-20 turnover list)</p>
+            <div class="chart-box"><canvas id="stockChart"></canvas></div>
+        </section>
+
+        <section class="card" style="margin-top:16px">
+            <h2>Daily history</h2>
+            <div class="table-wrap" style="margin-top:8px">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="num">Close</th>
+                        <th class="num">Change</th>
+                        <th class="num">Volume</th>
+                        <th class="num">Turnover (Rs)</th>
+                        <th class="num hide-sm">Transactions</th>
+                        <th class="num">Turnover rank</th>
+                        <th class="num">Volume rank</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="i : ${#numbers.sequence(s.days.size() - 1, 0, -1)}" th:with="d=${s.days[i]}">
+                        <td><a th:href="@{/(date=${d.date})}" th:text="${@fmt.day(d.date)}"></a></td>
+                        <td class="num" th:text="${@fmt.price(d.close)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(d.changePct)}" th:text="${@fmt.pct(d.changePct)}"></td>
+                        <td class="num" th:text="${@fmt.count(d.volume)}"></td>
+                        <td class="num" th:text="${@fmt.money(d.turnover)}"></td>
+                        <td class="num hide-sm" th:text="${@fmt.count(d.trades)}"></td>
+                        <td class="num" th:text="${d.turnoverRank != null} ? '#' + ${d.turnoverRank} : '—'"></td>
+                        <td class="num" th:text="${d.volumeRank != null} ? '#' + ${d.volumeRank} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const rows = /*[[${chartRows}]]*/ [];
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                const c = n => css.getPropertyValue(n).trim();
+                Chart.defaults.color = c('--muted');
+                Chart.defaults.borderColor = c('--border');
+                new Chart(document.getElementById('stockChart'), {
+                    data: {
+                        labels: rows.map(r => r.date),
+                        datasets: [
+                            { type: 'line', label: 'Close', data: rows.map(r => r.close), yAxisID: 'price',
+                              borderColor: c('--accent'), borderWidth: 2, pointRadius: 0, tension: 0.15 },
+                            { type: 'bar', label: 'Turnover (Rs crore)', data: rows.map(r => r.turnover == null ? null : r.turnover / 1e7), yAxisID: 'turnover',
+                              backgroundColor: rows.map(r => r.inTop ? c('--warn') : c('--border')), borderRadius: 2, maxBarThickness: 24 }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            price: { position: 'right', title: { display: true, text: 'Close' } },
+                            turnover: { position: 'left', grid: { display: false }, title: { display: true, text: 'Rs crore' } }
+                        }
+                    }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

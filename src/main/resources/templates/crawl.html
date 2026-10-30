@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Data & crawler')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Data &amp; crawler</h1>
+            <p>The app fetches ShareSansar's "Today's Share Price" once per trading day after the close
+                and stores every stock plus the top-20 turnover and volume lists.</p>
+        </div>
+    </div>
+
+    <div th:if="${result != null}" class="flash" th:classappend="${result.status}" th:text="${result.status} + ': ' + ${result.message}"></div>
+
+    <div class="grid-2">
+        <section class="card">
+            <h2>Schedule</h2>
+            <dl class="kv" style="margin-top:10px">
+                <dt>Source</dt><dd><a th:href="${crawl.url}" th:text="${crawl.url}" target="_blank" rel="noopener"></a></dd>
+                <dt>Trading days</dt><dd th:text="${market.tradingDays}"></dd>
+                <dt>Crawl window</dt><dd th:text="${crawl.windowStart} + '–' + ${crawl.windowEnd} + ' Nepal time (never during trading hours)'"></dd>
+                <dt>Automatic checks</dt><dd><code th:text="${crawl.cron}"></code> <span class="muted" th:unless="${crawl.enabled}">(disabled)</span></dd>
+                <dt>Holidays file</dt><dd th:text="${market.holidaysFile}"></dd>
+                <dt>Latest stored session</dt><dd th:text="${latest != null} ? ${@fmt.day(latest)} : 'none yet'"></dd>
+            </dl>
+        </section>
+        <section class="card">
+            <h2>Run now</h2>
+            <p class="sub">Uses the same rules as the schedule: only on trading days, only inside the crawl window,
+                and a day that's already stored is skipped.</p>
+            <form method="post" th:action="@{/crawl/run}" class="inline">
+                <button class="btn primary" type="submit">Crawl today's data</button>
+            </form>
+            <form method="post" th:action="@{/crawl/run}" class="inline" style="margin-top:10px">
+                <input type="hidden" name="replace" value="true">
+                <button class="btn" type="submit">Re-crawl and replace today's data</button>
+            </form>
+        </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+        <h2>Recent crawl attempts</h2>
+        <p class="sub">Routine "outside the window" checks aren't logged; fetches, skips after fetching and failures are.</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Run at</th><th>Status</th><th>Session</th><th>Message</th></tr></thead>
+                <tbody>
+                <tr th:if="${log.isEmpty()}"><td colspan="4" class="muted">No crawl attempts yet.</td></tr>
+                <tr th:each="e : ${log}">
+                    <td th:text="${#temporals.format(e.runAt, 'yyyy-MM-dd HH:mm')}"></td>
+                    <td><span class="pill" th:classappend="${e.status == 'STORED'} ? 'good' : (${e.status == 'FAILED'} ? 'bad' : '')" th:text="${e.status}"></span></td>
+                    <td th:text="${e.tradeDate != null} ? ${e.tradeDate} : '—'"></td>
+                    <td style="white-space:normal" th:text="${e.message}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

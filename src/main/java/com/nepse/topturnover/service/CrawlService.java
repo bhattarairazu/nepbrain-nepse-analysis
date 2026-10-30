@@ -1,133 +1,117 @@
 package com.nepse.topturnover.service;
 
-import java.sql.SQLException;
+import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
-import java.util.List;
-import java.util.Random;
-import java.util.logging.Logger;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
 
-import com.nepse.topturnover.config.AppConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.crawler.CrawlException;
-import com.nepse.topturnover.crawler.SourceCrawler;
-import com.nepse.topturnover.crawler.SourceSelector;
-import com.nepse.topturnover.db.SnapshotRepository;
+import com.nepse.topturnover.crawler.SharesansarCrawler;
 import com.nepse.topturnover.model.MarketSnapshot;
+import com.nepse.topturnover.repository.MarketDataRepository;
 import com.nepse.topturnover.schedule.CrawlWindow;
 
 /**
- * One crawl run: check the calendar/time guards, try the sources in order, validate the page,
- * and store the day. Safe to run many times a day; it stores each trading day once.
+ * One crawl run: check the calendar and after-close window, fetch ShareSansar, validate the page and
+ * store the day. Safe to call many times a day; each trading day is fetched and stored once.
  */
-public final class CrawlService {
-    private static final Logger LOG = Logger.getLogger(CrawlService.class.getName());
+@Service
+public class CrawlService {
+    private static final Logger LOG = LoggerFactory.getLogger(CrawlService.class);
 
-    public enum Outcome { STORED, SKIPPED, FAILED }
+    public enum Status { STORED, SKIPPED, FAILED }
+
+    public record Result(Status status, String message) {}
+
+    private final NepseProperties props;
+    private final SharesansarCrawler crawler;
+    private final MarketDataRepository repo;
+    private final CrawlWindow window;
+    private final ReentrantLock lock = new ReentrantLock();
+
+    public CrawlService(NepseProperties props, SharesansarCrawler crawler, MarketDataRepository repo) throws IOException {
+        this.props = props;
+        this.crawler = crawler;
+        this.repo = repo;
+        this.window = new CrawlWindow(props.market().days(), CrawlWindow.loadHolidays(props.market().holidays()),
+                props.crawl().start(), props.crawl().end());
+    }
 
     /**
-     * @param force  ignore the day/time/holiday guards and overwrite an already stored day
-     * @param source use only this source (null = config order)
+     * @param replaceToday re-fetch and overwrite today's stored data (still only inside the after-close window)
+     * @param jitter       wait a random few seconds first (scheduled runs); manual runs skip it
      */
-    public record Options(boolean force, String source) {}
-
-    private final AppConfig cfg;
-    private final CrawlWindow window;
-    private final SourceSelector selector;
-    private final SnapshotRepository repo;
-    private final Random random;
-
-    public CrawlService(AppConfig cfg, CrawlWindow window, SourceSelector selector, SnapshotRepository repo, Random random) {
-        this.cfg = cfg;
-        this.window = window;
-        this.selector = selector;
-        this.repo = repo;
-        this.random = random;
+    public Result run(boolean replaceToday, boolean jitter) {
+        if (!lock.tryLock()) return new Result(Status.SKIPPED, "A crawl is already running");
+        try {
+            return doRun(replaceToday, jitter);
+        } finally {
+            lock.unlock();
+        }
     }
 
-    public Outcome run(Options opt) throws SQLException {
-        ZonedDateTime now = ZonedDateTime.now(cfg.zone());
+    private Result doRun(boolean replaceToday, boolean jitter) {
+        ZonedDateTime now = ZonedDateTime.now(props.market().zone());
+        LocalDateTime nowLocal = now.toLocalDateTime().withNano(0);
         LocalDate today = now.toLocalDate();
 
-        if (!opt.force()) {
-            CrawlWindow.Decision d = window.check(now);
-            if (!d.allowed()) {
-                LOG.info("Not crawling: " + d.reason());
-                return Outcome.SKIPPED;
-            }
-            if (repo.hasDay(today)) {
-                LOG.info("Not crawling: data for " + today + " is already stored");
-                return Outcome.SKIPPED;
-            }
-            jitter();
-        }
+        CrawlWindow.Decision d = window.check(now);
+        if (!d.allowed()) return skipped("Not crawling: " + d.reason(), false, nowLocal, null);
+        if (!replaceToday && repo.hasDay(today)) return skipped("Data for " + today + " is already stored", false, nowLocal, today);
 
-        List<SourceCrawler> order = selector.order(opt.source());
-        boolean fallback = opt.source() == null && cfg.fallbackEnabled();
-        LOG.info("Source order: " + order.stream().map(SourceCrawler::name).toList() + (fallback ? " (with fallback)" : ""));
-
-        for (SourceCrawler crawler : order) {
+        if (jitter && props.crawl().jitterMaxSeconds() > 0) {
+            int wait = ThreadLocalRandom.current().nextInt(props.crawl().jitterMaxSeconds() + 1);
+            LOG.info("Waiting {}s before fetching", wait);
             try {
-                LOG.info("Fetching " + crawler.name() + " ...");
-                MarketSnapshot s = crawler.crawl();
-                Outcome result = store(s, today, now, opt.force());
-                if (result != null) return result;
-            } catch (CrawlException e) {
-                LOG.warning(crawler.name() + " failed: " + e.getMessage());
-                repo.logCrawl(now, crawler.name(), "FAILED", null, e.getMessage());
-                if (!fallback) break;
+                Thread.sleep(wait * 1000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }
-        LOG.severe("All sources failed; nothing stored");
-        return Outcome.FAILED;
-    }
 
-    /** Validates and stores a snapshot. Returns null when the page is unusable (so the next source is tried). */
-    private Outcome store(MarketSnapshot s, LocalDate today, ZonedDateTime now, boolean force) throws CrawlException, SQLException {
-        if (s.quotes().size() < cfg.minRows()) {
-            throw new CrawlException(s.source() + " returned only " + s.quotes().size()
-                    + " rows (minimum " + cfg.minRows() + "); page looks partial");
-        }
-        if (s.tradeDate().isAfter(today)) {
-            throw new CrawlException(s.source() + " shows a future date " + s.tradeDate() + "; check the computer clock/timezone");
-        }
-        if (!s.tradeDate().equals(today)) {
-            if (repo.hasDay(s.tradeDate()) && !force) {
-                String msg = "No trading session today: " + s.source() + " still shows " + s.tradeDate() + " (already stored)";
-                LOG.info(msg);
-                repo.logCrawl(now, s.source(), "SKIPPED", s.tradeDate(), msg);
-                return Outcome.SKIPPED;
-            }
-            LOG.warning(s.source() + " shows " + s.tradeDate() + " instead of today; storing it because that day is missing");
-        }
-        if (!force && repo.looksStale(s)) {
-            String msg = s.source() + " data for " + s.tradeDate() + " is identical to the previous stored day; treating it as a non-trading day";
-            LOG.info(msg);
-            repo.logCrawl(now, s.source(), "SKIPPED", s.tradeDate(), msg);
-            return Outcome.SKIPPED;
-        }
-        if (repo.hasDay(s.tradeDate()) && !force) {
-            LOG.info("Data for " + s.tradeDate() + " already stored");
-            return Outcome.SKIPPED;
-        }
-
-        repo.save(s, cfg.topN(), now);
-        String msg = String.format("Stored %s from %s: %d stocks, top %d by turnover and volume%s",
-                s.tradeDate(), s.source(), s.quotes().size(), cfg.topN(),
-                s.turnoverEstimated() ? " (turnover estimated as LTP x volume)" : "");
-        LOG.info(msg);
-        repo.logCrawl(now, s.source(), "STORED", s.tradeDate(), msg);
-        return Outcome.STORED;
-    }
-
-    private void jitter() {
-        int max = cfg.jitterMaxSeconds();
-        if (max <= 0) return;
-        int wait = random.nextInt(max + 1);
-        LOG.info("Waiting " + wait + "s before fetching (random jitter)");
+        MarketSnapshot s;
         try {
-            Thread.sleep(wait * 1000L);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            LOG.info("Fetching {}", props.crawl().url());
+            s = crawler.crawl();
+            if (s.quotes().size() < props.crawl().minRows()) {
+                throw new CrawlException("Page returned only " + s.quotes().size() + " rows (minimum "
+                        + props.crawl().minRows() + "); it looks partial");
+            }
+            if (s.tradeDate().isAfter(today)) {
+                throw new CrawlException("Page shows a future date " + s.tradeDate() + "; check the computer's clock");
+            }
+        } catch (CrawlException e) {
+            LOG.warn("Crawl failed: {}", e.getMessage());
+            repo.logCrawl(nowLocal, SharesansarCrawler.NAME, "FAILED", null, e.getMessage());
+            return new Result(Status.FAILED, e.getMessage());
         }
+
+        if (!s.tradeDate().equals(today) && repo.hasDay(s.tradeDate())) {
+            return skipped("No trading session today: the page still shows " + s.tradeDate(), true, nowLocal, s.tradeDate());
+        }
+        if (repo.looksStale(s)) {
+            return skipped("Data for " + s.tradeDate() + " repeats the previous session; treating today as a non-trading day",
+                    true, nowLocal, s.tradeDate());
+        }
+
+        repo.save(s, props.analysis().topN(), nowLocal);
+        String msg = String.format("Stored %s: %d stocks, top %d by turnover and by volume",
+                s.tradeDate(), s.quotes().size(), props.analysis().topN());
+        LOG.info(msg);
+        repo.logCrawl(nowLocal, SharesansarCrawler.NAME, "STORED", s.tradeDate(), msg);
+        return new Result(Status.STORED, msg);
+    }
+
+    private Result skipped(String msg, boolean log, LocalDateTime at, LocalDate tradeDate) {
+        LOG.info(msg);
+        if (log) repo.logCrawl(at, SharesansarCrawler.NAME, "SKIPPED", tradeDate, msg);
+        return new Result(Status.SKIPPED, msg);
     }
 }

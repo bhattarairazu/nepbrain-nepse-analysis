@@ -1,15 +1,16 @@
 package com.nepse.topturnover.crawler;
 
 import java.io.IOException;
-import java.util.logging.Logger;
 
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Fetches a page with jsoup, retrying network errors but never retrying a refusal (403/429). */
 public final class HttpFetcher {
-    private static final Logger LOG = Logger.getLogger(HttpFetcher.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(HttpFetcher.class);
 
     private final String userAgent;
     private final int timeoutMs;
@@ -42,7 +43,7 @@ public final class HttpFetcher {
                 last = e;
             }
             if (attempt < retries) {
-                LOG.warning("Fetch failed (" + last.getMessage() + "), retrying in " + retryDelayMs / 1000 + "s");
+                LOG.warn("Fetch failed (" + last.getMessage() + "), retrying in " + retryDelayMs / 1000 + "s");
                 try {
                     Thread.sleep(retryDelayMs);
                 } catch (InterruptedException ie) {
