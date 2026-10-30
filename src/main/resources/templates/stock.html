@@ -46,6 +46,29 @@
             </div>
         </div>
 
+        <section class="card" th:if="${sf != null}" style="margin-bottom:16px">
+            <h2>Signals on <span th:text="${@fmt.day(sf.date)}"></span></h2>
+            <div class="signal-grid">
+                <div><small>Volume vs normal</small><b th:text="${@fmt.ratio(sf.rvol)}"></b></div>
+                <div><small>Close in day's range</small><b th:text="${@fmt.share(sf.closeInRange)}"></b></div>
+                <div><small>Average trade size</small><b th:text="${@fmt.money(sf.avgTradeSize)}"></b>
+                    <span class="pill" th:classappend="${sf.tradeSizeClass.tone}" th:text="${sf.tradeSizeClass.label}"></span></div>
+                <div><small>Base (last <span th:text="${sf.baseSessions != null ? sf.baseSessions : '—'}"></span> sessions)</small>
+                    <b th:text="${sf.baseRangePct != null} ? ${@fmt.share(sf.baseRangePct)} + ' range' : '—'"></b></div>
+                <div><small>50-day EMA</small><b th:text="${@fmt.price(sf.ema50)}"></b>
+                    <span class="muted" th:if="${sf.ema50Rising != null}" th:text="${sf.ema50Rising} ? 'rising' : 'falling'"></span></div>
+                <div><small>200-day average</small><b th:text="${@fmt.price(sf.sma200)}"></b></div>
+                <div><small>RSI (14)</small><b th:text="${@fmt.decimal(sf.rsi14, 0)}"></b></div>
+                <div><small>60-session move</small><b th:text="${sf.runUp60 != null} ? '+' + ${@fmt.share(sf.runUp60)} + ' from low / ' + ${@fmt.share(sf.drawdown60)} + ' from high' : '—'"></b></div>
+            </div>
+            <ul class="reasons" style="margin-top:10px">
+                <li th:each="h : ${sf.patterns}" th:classappend="${h.pattern.tone == 'good'} ? 'plus' : 'minus'">
+                    <b th:text="'Pattern ' + ${h.pattern.number}"></b> <span th:text="${h.pattern.title} + ': ' + ${h.evidence}"></span>
+                </li>
+                <li th:if="${sf.patterns.isEmpty()}" class="muted">No volume pattern in the latest session.</li>
+            </ul>
+        </section>
+
         <section class="card">
             <h2>Price and turnover</h2>
             <p class="sub">Line: close · bars: turnover (darker when the stock was in the top-20 turnover list)</p>

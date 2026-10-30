@@ -15,12 +15,23 @@
         <span><b>NEPSE Top Turnover</b><small>Top 20 turnover &amp; volume analysis</small></span>
     </a>
     <nav>
+        <a th:href="@{/ideas}" th:classappend="${active == 'ideas'} ? 'on'">★ Ideas</a>
+        <a th:href="@{/patterns}" th:classappend="${active == 'patterns'} ? 'on'">Patterns</a>
+        <a th:href="@{/sectors}" th:classappend="${active == 'sectors'} ? 'on'">Sectors</a>
+        <a th:href="@{/trade-size}" th:classappend="${active == 'tradesize'} ? 'on'">Trade size</a>
         <a th:href="@{/}" th:classappend="${active == 'day'} ? 'on'">Daily lists</a>
         <a th:href="@{/money-flow}" th:classappend="${active == 'flow'} ? 'on'">Money flow</a>
-        <a th:href="@{/market}" th:classappend="${active == 'market'} ? 'on'">Market activity</a>
-        <a th:href="@{/crawl}" th:classappend="${active == 'crawl'} ? 'on'">Data &amp; crawler</a>
+        <a th:href="@{/market}" th:classappend="${active == 'market'} ? 'on'">Market</a>
+        <a th:href="@{/crawl}" th:classappend="${active == 'crawl'} ? 'on'">Data</a>
     </nav>
 </header>
+
+<form th:fragment="sessionPicker(path, current)" class="inline" method="get" th:action="@{${path}}" th:if="${sessions != null and !sessions.isEmpty()}">
+    <label class="muted" for="date">Session</label>
+    <select id="date" name="date" onchange="this.form.submit()">
+        <option th:each="d : ${sessions}" th:value="${d}" th:text="${@fmt.day(d)}" th:selected="${d == current}"></option>
+    </select>
+</form>
 
 <footer th:fragment="footer" class="footer">
     Data: ShareSansar "Today's Share Price", collected once per trading day after the close, for personal analysis.

@@ -17,6 +17,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.nepse.topturnover.analysis.AnalysisModels.MarketDay;
 import com.nepse.topturnover.analysis.AnalysisService;
+import com.nepse.topturnover.analysis.FeatureService;
+import com.nepse.topturnover.analysis.InsightService;
 import com.nepse.topturnover.analysis.Signal;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.repository.MarketDataRepository;
@@ -28,9 +30,14 @@ public class DashboardController {
     private final MarketDataRepository repo;
     private final CrawlService crawlService;
     private final NepseProperties props;
+    private final InsightService insights;
+    private final FeatureService features;
 
-    public DashboardController(AnalysisService analysis, MarketDataRepository repo, CrawlService crawlService, NepseProperties props) {
+    public DashboardController(AnalysisService analysis, MarketDataRepository repo, CrawlService crawlService, NepseProperties props,
+                               InsightService insights, FeatureService features) {
         this.analysis = analysis;
+        this.insights = insights;
+        this.features = features;
         this.repo = repo;
         this.crawlService = crawlService;
         this.props = props;
@@ -67,7 +74,9 @@ public class DashboardController {
     @GetMapping("/market")
     public String market(@RequestParam(defaultValue = "60") int days, Model model) {
         int n = Math.max(5, Math.min(days, 2500));
-        List<MarketDay> rows = analysis.market(n);
+        List<MarketDay> all = insights.marketDays(n, null);
+        List<MarketDay> rows = all.subList(Math.max(0, all.size() - n), all.size());
+        model.addAttribute("regime", insights.regime(null));
         model.addAttribute("active", "market");
         model.addAttribute("days", n);
         model.addAttribute("rows", rows);
@@ -78,6 +87,9 @@ public class DashboardController {
             m.put("turnoverAvg20", r.turnoverAvg20());
             m.put("topTurnoverShare", r.topTurnoverShare());
             m.put("topVolumeShare", r.topVolumeShare());
+            m.put("index", r.equalWeightIndex());
+            m.put("advancers", r.advancers());
+            m.put("decliners", r.decliners());
             return m;
         }).toList());
         model.addAttribute("topN", props.analysis().topN());
@@ -92,6 +104,7 @@ public class DashboardController {
         model.addAttribute("symbol", symbol.toUpperCase(Locale.ROOT));
         analysis.stock(symbol.toUpperCase(Locale.ROOT), n).ifPresent(s -> {
             model.addAttribute("s", s);
+            features.snapshot(null).map(snap -> snap.features().get(s.symbol())).ifPresent(f -> model.addAttribute("sf", f));
             model.addAttribute("chartRows", s.days().stream().map(d -> {
                 Map<String, Object> m = new HashMap<>();
                 m.put("date", d.date().toString());

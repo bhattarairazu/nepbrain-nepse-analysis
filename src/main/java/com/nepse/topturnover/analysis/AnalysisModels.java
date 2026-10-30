@@ -72,8 +72,10 @@ public final class AnalysisModels {
     public record MoneyFlow(String listType, int sessionsRequested, int sessionsUsed, LocalDate from, LocalDate to,
                             List<FlowRow> rows) {}
 
+    /** equalWeightIndex: average daily % change of ordinary shares chained from 1,000 (not the official NEPSE index). */
     public record MarketDay(LocalDate date, double turnover, double volume, Long trades, int stockCount,
-                            Double turnoverAvg20, Double topTurnoverShare, Double topVolumeShare) {}
+                            Double turnoverAvg20, Double topTurnoverShare, Double topVolumeShare,
+                            double equalWeightIndex, Integer advancers, Integer decliners) {}
 
     public record StockDay(LocalDate date, Double close, Double changePct, Double volume, Double turnover,
                            Integer trades, Integer turnoverRank, Integer volumeRank) {}

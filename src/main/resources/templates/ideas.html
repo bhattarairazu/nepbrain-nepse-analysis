@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Ideas')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1 th:text="${r != null} ? 'Stock ideas · ' + ${@fmt.day(r.date)} : 'Stock ideas'">Stock ideas</h1>
+            <p>The daily routine, run automatically: start from where the money went, keep strong closes, remove
+                extended or risky moves, then rank what's left. These are <b>stocks to research</b>, not buy signals.</p>
+        </div>
+        <form th:replace="~{fragments/layout :: sessionPicker('/ideas', ${r != null} ? ${r.date} : null)}"></form>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">
+        <h2>No data yet</h2>
+        <p>Ideas appear after the first crawl. See <a th:href="@{/crawl}">Data</a>.</p>
+    </div>
+
+    <th:block th:if="${r != null}">
+        <div class="note" th:if="${r.historySessions < 5}">
+            Building history: <b th:text="${r.historySessions}"></b> earlier session(s) stored. Until there are 5,
+            "active today" uses only the top-20 turnover list (relative volume needs history), and patterns, trend
+            and trade-size checks stay off. Scores become meaningful after about 20 sessions; the 200-day check after 200.
+        </div>
+
+        <!-- step 0: market -->
+        <section class="card regime-card" th:classappend="${r.regime.tone}">
+            <div>
+                <div class="k">Step 0 · Market</div>
+                <h2><span class="pill" th:classappend="${r.regime.tone}" th:text="${r.regime.label}"></span></h2>
+                <p class="sub" style="margin:6px 0 0" th:text="${r.regime.explanation}"></p>
+            </div>
+            <dl class="kv" th:if="${r.regime.index10Pct != null}">
+                <dt>Equal-weight index, 10 sessions</dt><dd th:classappend="${@fmt.tone(r.regime.index10Pct)}" th:text="${@fmt.pct(r.regime.index10Pct)}"></dd>
+                <dt>Turnover, last 5 vs previous 20</dt><dd th:text="${@fmt.ratio(r.regime.turnoverTrend)}"></dd>
+                <dt>From the 60-session high</dt><dd th:text="${@fmt.pct(r.regime.drawdown60Pct)}"></dd>
+            </dl>
+        </section>
+
+        <!-- funnel -->
+        <div class="funnel">
+            <div class="card step"><div class="n" th:text="${r.universe}"></div><div class="t">Ordinary shares traded</div></div>
+            <div class="arrow">→</div>
+            <div class="card step"><div class="n" th:text="${r.active}"></div><div class="t">Active: top-20 turnover or volume ≥ 2× normal</div></div>
+            <div class="arrow">→</div>
+            <div class="card step"><div class="n" th:text="${r.closedStrong}"></div><div class="t">Closed up, in the top 30% of the day's range</div></div>
+            <div class="arrow">→</div>
+            <div class="card step on"><div class="n" th:text="${r.kept}"></div><div class="t">After removing extended and risky moves</div></div>
+        </div>
+
+        <!-- candidates by tier -->
+        <th:block th:each="t : ${tiers}" th:with="list=${r.tier(t)}">
+            <section th:if="${!list.isEmpty()}" class="tier">
+                <h2><span class="pill" th:classappend="${t.tone}" th:text="${t.label}"></span>
+                    <span class="muted" th:text="${list.size()} + ' stock(s)'"></span></h2>
+                <div class="ideas">
+                    <article class="card idea" th:each="i : ${list}" th:with="f=${i.f}">
+                        <header>
+                            <div>
+                                <a class="sym-big" th:href="@{/stock/{s}(s=${f.symbol})}" th:text="${f.symbol}"></a>
+                                <div class="muted small" th:text="${f.name} + (${f.sector != null} ? ' · ' + ${f.sector} : '')"></div>
+                            </div>
+                            <div class="score" th:title="'Score ' + ${i.score} + ' / 100'">
+                                <b th:text="${i.score}"></b><span class="meter"><span th:style="'width:' + ${i.score} + '%'"></span></span>
+                            </div>
+                        </header>
+                        <div class="facts">
+                            <span><small>Close</small><b th:text="${@fmt.price(f.close)}"></b></span>
+                            <span><small>Change</small><b th:classappend="${@fmt.tone(f.changePct)}" th:text="${@fmt.pct(f.changePct)}"></b></span>
+                            <span><small>Turnover</small><b th:text="${@fmt.money(f.turnover)}"></b></span>
+                            <span><small>Volume vs normal</small><b th:text="${@fmt.ratio(f.rvol)}"></b></span>
+                            <span><small>Suggested stop</small><b th:text="${@fmt.price(i.stop)} + ' (' + ${@fmt.pct(i.stopPct)} + ')'"></b></span>
+                        </div>
+                        <ul class="reasons">
+                            <li th:each="x : ${i.reasons}" th:classappend="${x.positive} ? 'plus' : 'minus'">
+                                <b th:text="${x.positive} ? '+' + ${x.points} : ${x.points}"></b> <span th:text="${x.text}"></span>
+                            </li>
+                            <li th:if="${i.reasons.isEmpty()}" class="muted">Passed the filters; no extra points yet.</li>
+                        </ul>
+                        <footer>
+                            <a th:href="@{/stock/{s}(s=${f.symbol})}">Chart &amp; history</a>
+                            <a th:href="'https://www.sharesansar.com/company/' + ${#strings.toLowerCase(f.symbol)}" target="_blank" rel="noopener">Floorsheet ↗</a>
+                        </footer>
+                    </article>
+                </div>
+            </section>
+        </th:block>
+
+        <div class="card empty" th:if="${r.ideas.isEmpty()}">
+            No stock passed all the filters for this session. That's a valid answer: on weak days, waiting is the trade.
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+            <section class="card">
+                <h2>Setups forming</h2>
+                <p class="sub">Tight base (range ≤ 15%) and closing within 3% of the base high. Watch for a close above it on 2× volume.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Symbol</th><th class="num">Close</th><th class="num">Base high</th><th class="num">Base range</th><th class="num">Turnover</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${r.forming.isEmpty()}"><td colspan="5" class="muted">None yet (needs 15+ stored sessions).</td></tr>
+                        <tr th:each="f : ${r.forming}">
+                            <td class="sym"><a th:href="@{/stock/{s}(s=${f.symbol})}" th:text="${f.symbol}"></a><small th:text="${f.sector}"></small></td>
+                            <td class="num" th:text="${@fmt.price(f.close)}"></td>
+                            <td class="num" th:text="${@fmt.price(f.baseHigh)}"></td>
+                            <td class="num" th:text="${@fmt.share(f.baseRangePct)}"></td>
+                            <td class="num" th:text="${@fmt.money(f.turnover)}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="card">
+                <h2>Removed today</h2>
+                <p class="sub">Active and closed strong, but dropped by step 4 of the routine.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Symbol</th><th class="num">Change</th><th>Why</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${r.dropped.isEmpty()}"><td colspan="3" class="muted">Nothing removed.</td></tr>
+                        <tr th:each="d : ${r.dropped}">
+                            <td class="sym"><a th:href="@{/stock/{s}(s=${d.f.symbol})}" th:text="${d.f.symbol}"></a></td>
+                            <td class="num" th:classappend="${@fmt.tone(d.f.changePct)}" th:text="${@fmt.pct(d.f.changePct)}"></td>
+                            <td style="white-space:normal" th:text="${d.reason}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+            <section class="card">
+                <h2>Where money flowed this week</h2>
+                <p class="sub">Share of the top-20 turnover slots. <a th:href="@{/sectors}">Full sector view →</a></p>
+                <p th:if="${!r.sectorsAssigned}" class="muted">No sectors assigned yet. <a th:href="@{/sectors}">Assign them</a> to enable this.</p>
+                <table th:if="${r.sectorsAssigned}">
+                    <tbody>
+                    <tr th:each="s : ${r.sectorsThisWeek}">
+                        <td th:text="${s.sector}"></td>
+                        <td style="width:50%"><span class="bar" th:style="'width:' + ${s.latestShare() != null ? s.latestShare() * 100 : 0} + '%'"></span></td>
+                        <td class="num" th:text="${@fmt.share(s.latestShare())}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+            <section class="card">
+                <h2>Before you buy anything</h2>
+                <ol class="howto">
+                    <li><b>Chart:</b> confirm the base breakout, and that it isn't extended after a big run.</li>
+                    <li><b>Floorsheet:</b> look for broad buying across several brokers, not one dominant broker.</li>
+                    <li><b>Trend:</b> above the 50-day EMA and 200-day average, RSI not overbought.</li>
+                    <li><b>Fundamentals and news:</b> no book closure, bad results or regulatory issue coming.</li>
+                    <li><b>Risk:</b> set the stop first (suggested above), risk 1–2% of capital per trade.</li>
+                </ol>
+            </section>
+        </div>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

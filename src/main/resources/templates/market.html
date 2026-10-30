@@ -18,6 +18,32 @@
     <div th:if="${rows.isEmpty()}" class="card empty">No data yet. See <a th:href="@{/crawl}">Data &amp; crawler</a>.</div>
 
     <th:block th:unless="${rows.isEmpty()}">
+        <section class="card regime-card" th:classappend="${regime.tone}" style="margin-bottom:16px">
+            <div>
+                <div class="k">Market regime (last 10 sessions)</div>
+                <h2><span class="pill" th:classappend="${regime.tone}" th:text="${regime.label}"></span></h2>
+                <p class="sub" style="margin:6px 0 0" th:text="${regime.explanation}"></p>
+            </div>
+            <dl class="kv" th:if="${regime.index10Pct != null}">
+                <dt>Equal-weight index</dt><dd th:classappend="${@fmt.tone(regime.index10Pct)}" th:text="${@fmt.pct(regime.index10Pct)}"></dd>
+                <dt>Turnover, last 5 vs previous 20</dt><dd th:text="${@fmt.ratio(regime.turnoverTrend)}"></dd>
+                <dt>From the 60-session high</dt><dd th:text="${@fmt.pct(regime.drawdown60Pct)}"></dd>
+            </dl>
+        </section>
+        <div class="grid-4 legend-states">
+            <div><span class="pill good">Index ↑ turnover ↑</span> Healthy bull market</div>
+            <div><span class="pill warn">Index ↑ turnover ↓</span> Weak rally that may not last</div>
+            <div><span class="pill bad">Index ↓ turnover ↑</span> Heavy selling, stay careful</div>
+            <div><span class="pill warn">Turnover dries up after a fall</span> Sellers exhausted, often near a bottom</div>
+        </div>
+
+        <section class="card" style="margin-bottom:16px">
+            <h2>Equal-weight index and breadth</h2>
+            <p class="sub">Line: average daily % change of ordinary shares, chained from 1,000. It is <b>not</b> the official
+                NEPSE index (which is weighted by market value), but it moves with the broad market. Bars: advancing vs declining stocks.</p>
+            <div class="chart-box"><canvas id="indexChart"></canvas></div>
+        </section>
+
         <div class="grid-2">
             <section class="card">
                 <h2>Market turnover (Rs crore)</h2>
@@ -40,6 +66,8 @@
                         <th>Date</th>
                         <th class="num">Turnover (Rs)</th>
                         <th class="num">vs 20-session avg</th>
+                        <th class="num">Equal-wt index</th>
+                        <th class="num">Adv / Dec</th>
                         <th class="num">Volume</th>
                         <th class="num hide-sm">Transactions</th>
                         <th class="num hide-sm">Stocks traded</th>
@@ -53,6 +81,8 @@
                         <td class="num" th:text="${@fmt.money(r.turnover)}"></td>
                         <td class="num" th:with="ratio=${r.turnoverAvg20 != null and r.turnoverAvg20 > 0} ? ${r.turnover / r.turnoverAvg20} : null"
                             th:classappend="${ratio != null} ? ${@fmt.tone(ratio - 1)}" th:text="${@fmt.ratio(ratio)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(r.equalWeightIndex, 1)}"></td>
+                        <td class="num"><span class="pos" th:text="${r.advancers}"></span> / <span class="neg" th:text="${r.decliners}"></span></td>
                         <td class="num" th:text="${@fmt.count(r.volume)}"></td>
                         <td class="num hide-sm" th:text="${@fmt.count(r.trades)}"></td>
                         <td class="num hide-sm" th:text="${r.stockCount}"></td>
@@ -83,6 +113,21 @@
                     },
                     options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
                                scales: { y: { title: { display: true, text: 'Rs crore' } } } }
+                });
+                new Chart(document.getElementById('indexChart'), {
+                    data: {
+                        labels,
+                        datasets: [
+                            { type: 'line', label: 'Equal-weight index', data: rows.map(r => r.index), yAxisID: 'idx',
+                              borderColor: c('--accent'), borderWidth: 2, pointRadius: 0, tension: 0.15 },
+                            { type: 'bar', label: 'Advancers', data: rows.map(r => r.advancers), yAxisID: 'n',
+                              backgroundColor: c('--pos-soft'), borderColor: c('--pos'), borderWidth: 1, maxBarThickness: 14 },
+                            { type: 'bar', label: 'Decliners', data: rows.map(r => r.decliners), yAxisID: 'n',
+                              backgroundColor: c('--neg-soft'), borderColor: c('--neg'), borderWidth: 1, maxBarThickness: 14 }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { idx: { position: 'left' }, n: { position: 'right', grid: { display: false }, beginAtZero: true } } }
                 });
                 new Chart(document.getElementById('shareChart'), {
                     type: 'line',

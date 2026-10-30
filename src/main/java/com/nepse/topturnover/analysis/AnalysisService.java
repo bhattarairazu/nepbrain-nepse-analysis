@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import com.nepse.topturnover.analysis.AnalysisModels.DayAnalysis;
 import com.nepse.topturnover.analysis.AnalysisModels.FlowRow;
-import com.nepse.topturnover.analysis.AnalysisModels.MarketDay;
 import com.nepse.topturnover.analysis.AnalysisModels.MoneyFlow;
 import com.nepse.topturnover.analysis.AnalysisModels.StockDay;
 import com.nepse.topturnover.analysis.AnalysisModels.StockView;
@@ -195,40 +194,6 @@ public class AnalysisService {
             return new FlowRow(a.symbol(), a.name(), a.n(), a.avgRank(), a.best(), a.total(), change, last, latestRank.get(a.symbol()));
         }).toList();
         return Optional.of(new MoneyFlow(listType, sessionsWanted, sessions.size(), from, to, rows));
-    }
-
-    // ------------------------------------------------------------------ market activity
-
-    public List<MarketDay> market(int sessionsWanted) {
-        List<MarketDay> all = new ArrayList<>();
-        Map<LocalDate, double[]> topSums = new HashMap<>();
-        jdbc.query("""
-                SELECT trade_date, SUM(CASE WHEN list_type = 'TURNOVER' THEN metric_value END),
-                       SUM(CASE WHEN list_type = 'VOLUME' THEN metric_value END)
-                FROM top_ranking GROUP BY trade_date ORDER BY trade_date DESC LIMIT :n""",
-                Map.of("n", sessionsWanted + AVG_SESSIONS),
-                rs -> { topSums.put(rs.getObject(1, LocalDate.class), new double[] {rs.getDouble(2), rs.getDouble(3)}); });
-        List<Object[]> days = jdbc.query("""
-                SELECT trade_date, total_turnover, total_volume, total_trades, stock_count
-                FROM trading_day ORDER BY trade_date DESC LIMIT :n""",
-                Map.of("n", sessionsWanted + AVG_SESSIONS),
-                (rs, i) -> new Object[] {rs.getObject(1, LocalDate.class), rs.getDouble(2), rs.getDouble(3),
-                        rs.getObject(4) == null ? null : rs.getLong(4), rs.getInt(5)});
-        Collections.reverse(days); // oldest first
-        for (int i = 0; i < days.size(); i++) {
-            Object[] d = days.get(i);
-            LocalDate date = (LocalDate) d[0];
-            double turnover = (double) d[1], volume = (double) d[2];
-            Double avg20 = null;
-            if (i >= MIN_HISTORY) {
-                avg20 = days.subList(Math.max(0, i - AVG_SESSIONS), i).stream().mapToDouble(x -> (double) x[1]).average().orElse(0);
-            }
-            double[] top = topSums.get(date);
-            all.add(new MarketDay(date, turnover, volume, (Long) d[3], (int) d[4], avg20,
-                    top != null && turnover > 0 ? top[0] / turnover : null,
-                    top != null && volume > 0 ? top[1] / volume : null));
-        }
-        return all.subList(Math.max(0, all.size() - sessionsWanted), all.size());
     }
 
     // ------------------------------------------------------------------ single stock

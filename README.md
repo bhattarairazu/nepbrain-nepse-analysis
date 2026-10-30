@@ -44,19 +44,43 @@ The Mac must be on and the app running at crawl time. A missed day can't be fetc
 ## Dashboard
 | Page | What it answers |
 |---|---|
-| **Daily lists** | Top 20 by turnover and by volume for any session, with relative volume (RVOL), price + volume signal, close position in the day's range, average trade size, streak, appearances in the last 10 sessions, new entries, and stocks in both lists |
-| **Money flow** | Which stocks keep appearing over the last 5/10/20/60 sessions, and how their price moved meanwhile |
-| **Market activity** | Total turnover vs its 20-session average, and the share taken by the top 20 |
-| **Stock page** | Price and turnover chart and the stock's daily rank history |
+| **★ Ideas** | The daily routine, automated: market regime → active today (top-20 turnover or volume ≥ 2× normal) → closed up near the high → extended/risky moves removed → candidates scored 0–100 with every reason shown, a suggested stop, and links to the chart and the ShareSansar floorsheet. Also "setups forming" (tight bases near a breakout) and what was removed and why. |
+| **Patterns** | The five volume patterns for every ordinary share: 1 breakout from a quiet base, 2 climax after a run-up, 3 capitulation at the lows, 4 high volume with no price progress, 5 upper-circuit run on fading volume, each with the evidence. |
+| **Sectors** | Share of the top-20 turnover slots per sector, week by week for 5 weeks (sector rotation), plus sector management. |
+| **Trade size** | Turnover ÷ trades: larger trades building (bigger investors), retail frenzy, possible block deals, and a table for the top 20. |
+| **Daily lists** | Top 20 by turnover and by volume with RVOL, price + volume signal, close position, streaks and new entries. |
+| **Money flow** | Which stocks keep appearing over 5/10/20/60 sessions. |
+| **Market** | Regime (index direction vs turnover), equal-weight index and breadth, turnover vs its average, top-20 concentration. |
 
-Signals (from price change and RVOL):
-- **Accumulation**: price up 1%+ on 1.5× or more normal volume
-- **Distribution**: price down 1%+ on 1.5× or more normal volume
-- **Churn**: price flat on 2× or more volume
-- **Weak rally**: price up 1%+ on below-normal volume
-- **Quiet pullback**: price down 1%+ on below-normal volume
+Scores rank stocks **to research**; they are not buy signals. All thresholds live in
+`src/main/java/com/nepse/topturnover/analysis/Rules.java`.
 
-RVOL and signals appear after **5 stored sessions** and are most reliable after 20.
+### History needed
+| Feature | Earlier sessions needed |
+|---|---|
+| Relative volume, signals, trade-size classes | 5 (reliable after 20) |
+| Quiet base / breakout (pattern 1) | 15 |
+| Market regime | 25 |
+| Run-up and long-fall patterns (2, 3), 50-day EMA | 40–50 |
+| 200-day average | 200 |
+
+Until then the pages say what is missing.
+
+### Sectors and the index
+- ShareSansar's price table has no sector column, so after each crawl the app **guesses sectors from company names**
+  (about 94% of stocks on a real page). Guesses are marked AUTO. Fix the rest on the Sectors page or import a
+  `SYMBOL,Sector` CSV. Your choices are marked MANUAL and are never overwritten.
+- The official NEPSE index isn't on the crawled page, so the Market page uses an **equal-weight index**
+  (average daily % change of ordinary shares). It shows the broad direction but is not the official number.
+
+### Try the UI with demo data
+To see every page working before real history exists, fill a separate database with a synthetic market:
+```bash
+mysql -uroot -p -e "CREATE DATABASE nepse_demo"
+NEPSE_DEMO_DB_URL=jdbc:mysql://localhost:3306/nepse_demo NEPSE_IT_DB_USER=root NEPSE_IT_DB_PASSWORD=... mvn test -Dtest=DemoDataSeeder
+java -jar target/nepse-topturnover.jar --server.port=8081 --spring.datasource.url=jdbc:mysql://localhost:3306/nepse_demo --nepse.crawl.enabled=false
+```
+Fictional symbols (BRK, CLX, CAP, CHN, BLK, OPR, RTL, INST) each show one planted pattern. Never seed `nepse_analysis`.
 
 ## Database
 | Table | Contents |
@@ -64,7 +88,7 @@ RVOL and signals appear after **5 stored sessions** and are most reliable after 
 | `trading_day` | One row per session: source, crawl time, stock count, market totals |
 | `daily_price` | **Every stock, every session**: OHLC, LTP, prev close, VWAP, volume, turnover, trades, change % |
 | `top_ranking` | Top 20 by `TURNOVER` and by `VOLUME` per session |
-| `stock` | Symbol, company name, sector (fill in yourself), first/last seen |
+| `stock` | Symbol, company name, sector (guessed or yours) and its source (AUTO/MANUAL), first/last seen |
 | `corporate_action` | Bonus/right/split records you add, for adjusting long-term studies |
 | `crawl_log` | Every fetch attempt and its outcome |
 

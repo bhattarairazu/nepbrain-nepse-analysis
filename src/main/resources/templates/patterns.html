@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Patterns')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1 th:text="${snap != null} ? 'Volume patterns · ' + ${@fmt.day(snap.date)} : 'Volume patterns'">Volume patterns</h1>
+            <p>The five volume patterns, checked on every ordinary share for the session. Pattern 1 is the setup to look for;
+                patterns 2 and 5 are warnings; 3 and 4 need confirmation.</p>
+        </div>
+        <form th:replace="~{fragments/layout :: sessionPicker('/patterns', ${snap != null} ? ${snap.date} : null)}"></form>
+    </div>
+
+    <div th:if="${snap == null}" class="card empty">No data yet. See <a th:href="@{/crawl}">Data</a>.</div>
+
+    <th:block th:if="${snap != null}">
+        <div class="note" th:if="${snap.historySessions < 40}">
+            <b th:text="${snap.historySessions}"></b> earlier session(s) stored. Volume spikes need 5, quiet bases need 15,
+            and run-ups or long falls (patterns 2 and 3) need 40. Patterns switch on automatically as history builds.
+        </div>
+
+        <nav class="pattern-nav">
+            <a th:each="g : ${groups}" th:href="'#p' + ${g.pattern.number}">
+                <span class="pill" th:classappend="${g.pattern.tone}" th:text="${g.pattern.number}"></span>
+                <span th:text="${g.pattern.title}"></span>
+                <b th:text="${g.stocks.size()}"></b>
+            </a>
+        </nav>
+
+        <section class="card pattern" th:each="g : ${groups}" th:id="'p' + ${g.pattern.number}">
+            <div class="pattern-head">
+                <span class="big-num" th:classappend="${g.pattern.tone}" th:text="${g.pattern.number}"></span>
+                <div>
+                    <h2 th:text="${g.pattern.title}"></h2>
+                    <p class="sub" style="margin:2px 0 0"><b>Looks like:</b> <span th:text="${g.pattern.lookFor}"></span></p>
+                    <p class="sub" style="margin:2px 0 0"><b>Meaning:</b> <span th:text="${g.pattern.meaning}"></span></p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Symbol</th><th class="num">Close</th><th class="num">Change</th><th class="num">Volume vs normal</th>
+                        <th class="num">Turnover</th><th>Evidence</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${g.stocks.isEmpty()}"><td colspan="6" class="muted">No stock shows this pattern in this session.</td></tr>
+                    <tr th:each="f : ${g.stocks}">
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${f.symbol})}" th:text="${f.symbol}"></a><small th:text="${f.sector}"></small></td>
+                        <td class="num" th:text="${@fmt.price(f.close)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(f.changePct)}" th:text="${@fmt.pct(f.changePct)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(f.rvol)}"></td>
+                        <td class="num" th:text="${@fmt.money(f.turnover)}"></td>
+                        <td style="white-space:normal" th:each="h : ${f.patterns}" th:if="${h.pattern == g.pattern}" th:text="${h.evidence}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="grid-2">
+            <section class="card">
+                <h2>Limits of turnover and volume</h2>
+                <ul class="howto">
+                    <li>They don't show <b>who</b> is buying. Use the floorsheet for that.</li>
+                    <li>They don't show the trend. A stock can be top-turnover while falling.</li>
+                    <li>Operators can create volume by trading between their own accounts.</li>
+                    <li>A single day is noisy. Confirm with the 5–10 session view on <a th:href="@{/money-flow}">Money flow</a>.</li>
+                </ul>
+            </section>
+            <section class="card">
+                <h2>Rules used</h2>
+                <dl class="kv">
+                    <th:block th:each="e : ${rules}"><dt th:text="${e.key}"></dt><dd th:text="${e.value}"></dd></th:block>
+                </dl>
+            </section>
+        </div>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -131,6 +131,51 @@ public class MarketDataRepository {
                         rs.getObject(4, LocalDate.class), rs.getString(5)), limit);
     }
 
+    // ---------------------------------------------------------------- sectors
+
+    public record StockRow(String symbol, String name, String sector, String sectorSource, LocalDate lastSeen) {}
+
+    /** @param filter "unassigned", "auto", or anything else for all stocks */
+    public List<StockRow> stocks(String filter) {
+        String where = switch (filter == null ? "" : filter) {
+            case "unassigned" -> "WHERE sector IS NULL";
+            case "auto" -> "WHERE sector_source = 'AUTO'";
+            default -> "";
+        };
+        return jdbc.query("SELECT symbol, name, sector, sector_source, last_seen FROM stock " + where
+                        + " ORDER BY sector IS NULL DESC, sector, symbol",
+                (rs, i) -> new StockRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getObject(5, LocalDate.class)));
+    }
+
+    public void setSector(String symbol, String sector) {
+        boolean clear = sector == null || sector.isBlank();
+        jdbc.update("UPDATE stock SET sector = ?, sector_source = ? WHERE symbol = ?",
+                clear ? null : sector, clear ? null : "MANUAL", symbol);
+    }
+
+    /** Guesses a sector from the company name for stocks that have none. Never touches existing sectors. */
+    public int autoAssignSectors() {
+        List<Object[]> updates = new ArrayList<>();
+        jdbc.query("SELECT symbol, name FROM stock WHERE sector IS NULL", rs -> {
+            String guess = com.nepse.topturnover.analysis.Sectors.guess(rs.getString(2));
+            if (guess != null) updates.add(new Object[] {guess, rs.getString(1)});
+        });
+        if (!updates.isEmpty()) {
+            jdbc.batchUpdate("UPDATE stock SET sector = ?, sector_source = 'AUTO' WHERE symbol = ? AND sector IS NULL", updates);
+        }
+        return updates.size();
+    }
+
+    /** Sets sectors from symbol -> sector pairs (CSV import); counts as manual. */
+    public int importSectors(Map<String, String> sectors) {
+        int n = 0;
+        for (var e : sectors.entrySet()) {
+            n += jdbc.update("UPDATE stock SET sector = ?, sector_source = 'MANUAL' WHERE symbol = ?", e.getValue(), e.getKey());
+        }
+        return n;
+    }
+
     private static Double sum(List<StockQuote> quotes, Function<StockQuote, Double> f) {
         return quotes.stream().map(f).filter(Objects::nonNull).mapToDouble(Double::doubleValue).sum();
     }

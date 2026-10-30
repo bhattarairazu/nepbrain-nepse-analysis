@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Trade size')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1 th:text="${snap != null} ? 'Average trade size · ' + ${@fmt.day(snap.date)} : 'Average trade size'">Average trade size</h1>
+            <p>Turnover ÷ number of trades. Large and rising suggests bigger investors; many small trades suggest a retail crowd;
+                one huge trade is a block deal and says little about the trend.</p>
+        </div>
+        <form th:replace="~{fragments/layout :: sessionPicker('/trade-size', ${snap != null} ? ${snap.date} : null)}"></form>
+    </div>
+
+    <div th:if="${snap == null}" class="card empty">No data yet. See <a th:href="@{/crawl}">Data</a>.</div>
+
+    <th:block th:if="${snap != null}">
+        <div class="note" th:if="${snap.historySessions < 5}">
+            Trade-size classes compare with each stock's normal level, which needs 5 earlier sessions
+            (<b th:text="${snap.historySessions}"></b> so far). Today's raw figures are shown below meanwhile.
+        </div>
+
+        <div class="grid-3">
+            <section class="card" th:each="c : ${classes}">
+                <h2><span class="pill" th:classappend="${c.tone}" th:text="${c.label}"></span></h2>
+                <p class="sub" th:text="${c.meaning}"></p>
+                <table>
+                    <thead><tr><th>Symbol</th><th class="num">Avg trade</th><th class="num">vs normal</th><th class="num">Change</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${byClass.get(c).isEmpty()}"><td colspan="4" class="muted">None in this session.</td></tr>
+                    <tr th:each="f : ${byClass.get(c)}">
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${f.symbol})}" th:text="${f.symbol}"></a></td>
+                        <td class="num" th:text="${@fmt.money(f.avgTradeSize)}"></td>
+                        <td class="num" th:text="${c.name() == 'LARGER_TRADES'} ? ${@fmt.ratio(f.tradeSizeTrend)} :
+                                (${f.avgTradeSize != null and f.avgTradeSizeNormal != null and f.avgTradeSizeNormal > 0} ? ${@fmt.ratio(f.avgTradeSize / f.avgTradeSizeNormal)} : '—')"></td>
+                        <td class="num" th:classappend="${@fmt.tone(f.changePct)}" th:text="${@fmt.pct(f.changePct)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+        </div>
+
+        <section class="card" style="margin-top:16px">
+            <h2>Top-20 turnover: who is trading?</h2>
+            <p class="sub">5-session trend = average trade size over the last 5 sessions ÷ the previous 20.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th class="num">#</th><th>Symbol</th><th class="num">Turnover</th><th class="num">Trades</th>
+                        <th class="num">Trades vs normal</th><th class="num">Avg trade</th><th class="num">Normal avg trade</th>
+                        <th class="num">5-session trend</th><th>Reading</th></tr></thead>
+                    <tbody>
+                    <tr th:each="f : ${top}">
+                        <td class="num rank" th:text="${f.turnoverRank}"></td>
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${f.symbol})}" th:text="${f.symbol}"></a><small th:text="${f.sector}"></small></td>
+                        <td class="num" th:text="${@fmt.money(f.turnover)}"></td>
+                        <td class="num" th:text="${@fmt.count(f.trades)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(f.tradesRatio)}"></td>
+                        <td class="num"><b th:text="${@fmt.money(f.avgTradeSize)}"></b></td>
+                        <td class="num" th:text="${@fmt.money(f.avgTradeSizeNormal)}"></td>
+                        <td class="num" th:classappend="${f.tradeSizeTrend != null and f.tradeSizeTrend >= 1.3} ? 'pos'" th:text="${@fmt.ratio(f.tradeSizeTrend)}"></td>
+                        <td><span class="pill" th:classappend="${f.tradeSizeClass.tone}" th:text="${f.tradeSizeClass.label}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

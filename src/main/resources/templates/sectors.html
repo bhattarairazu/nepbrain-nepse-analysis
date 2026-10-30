@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Sectors')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Sector money flow</h1>
+            <p>Share of the top-20 turnover slots each sector took, week by week. If Hydropower goes from 3 of the
+                top 20 to 8, money is moving into Hydropower. Rising rows are where rotation is heading.</p>
+        </div>
+    </div>
+
+    <div th:if="${message != null}" class="flash SKIPPED" th:text="${message}"></div>
+
+    <div class="note" th:if="${flow.assignedStocks < flow.totalStocks}">
+        <b th:text="${flow.totalStocks - flow.assignedStocks}"></b> of <span th:text="${flow.totalStocks}"></span> stocks have no sector yet
+        and are counted as "Unassigned". Sectors are guessed from company names after each crawl; fix the rest
+        <a href="#stocks">below</a>.
+    </div>
+
+    <section class="card">
+        <h2>Top-20 turnover share by sector</h2>
+        <p class="sub">Each cell: slots taken ÷ (20 × sessions that week). Change compares the latest week with the earliest one shown.</p>
+        <div class="table-wrap">
+            <table class="heat">
+                <thead>
+                <tr>
+                    <th>Sector</th>
+                    <th class="num" th:each="w, st : ${flow.weeks}">
+                        <span th:text="'Week of ' + ${@fmt.shortDay(w)}"></span><br>
+                        <small class="muted" th:text="${flow.sessionsPerWeek[st.index]} + ' session(s)'"></small>
+                    </th>
+                    <th class="num">Change</th>
+                    <th class="num hide-sm">Stocks</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:if="${flow.rows.isEmpty()}"><td colspan="8" class="muted">No data yet.</td></tr>
+                <tr th:each="row : ${flow.rows}">
+                    <td><b th:text="${row.sector}"></b></td>
+                    <td class="num" th:each="s, st : ${row.share}"
+                        th:style="${s != null} ? 'background: rgba(47,91,234,' + ${#numbers.formatDecimal(s * 1.6, 1, 2, 'POINT')} + ')' : ''"
+                        th:title="${row.slots[st.index]} + ' slot(s)'"
+                        th:text="${s != null} ? ${@fmt.share(s)} : '—'"></td>
+                    <td class="num" th:classappend="${@fmt.tone(row.changePts)}"
+                        th:text="${row.changePts != null} ? ${#numbers.formatDecimal(row.changePts, 1, 1, 'POINT')} + ' pts' : '—'"></td>
+                    <td class="num hide-sm" th:text="${row.stocks}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" id="stocks" style="margin-top:16px">
+        <div class="page-head" style="margin-bottom:8px">
+            <div>
+                <h2>Stock sectors</h2>
+                <p class="sub" style="margin:4px 0 0">AUTO = guessed from the company name, so check it. Your changes are marked MANUAL and are never overwritten.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <span class="seg">
+                    <a th:href="@{/sectors(show='unassigned')} + '#stocks'" th:classappend="${show == 'unassigned'} ? 'on'">Unassigned</a>
+                    <a th:href="@{/sectors(show='auto')} + '#stocks'" th:classappend="${show == 'auto'} ? 'on'">Guessed (AUTO)</a>
+                    <a th:href="@{/sectors(show='all')} + '#stocks'" th:classappend="${show == 'all'} ? 'on'">All</a>
+                </span>
+                <form method="post" th:action="@{/sectors/auto}"><button class="btn" type="submit">Guess missing sectors</button></form>
+            </div>
+        </div>
+
+        <form method="post" th:action="@{/sectors/import}" enctype="multipart/form-data" class="inline" style="margin-bottom:12px">
+            <label class="muted">Import CSV (lines: <code>SYMBOL,Sector</code>)</label>
+            <input type="file" name="file" accept=".csv,text/csv" required>
+            <button class="btn" type="submit">Import</button>
+        </form>
+
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Symbol</th><th>Company</th><th>Sector</th><th>Source</th></tr></thead>
+                <tbody>
+                <tr th:if="${stocks.isEmpty()}"><td colspan="4" class="muted">Nothing to show.</td></tr>
+                <tr th:each="s : ${stocks}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${s.symbol})}" th:text="${s.symbol}"></a></td>
+                    <td style="white-space:normal" th:text="${s.name}"></td>
+                    <td>
+                        <form method="post" th:action="@{/sectors/assign}">
+                            <input type="hidden" name="symbol" th:value="${s.symbol}">
+                            <input type="hidden" name="show" th:value="${show}">
+                            <select name="sector" onchange="this.form.submit()">
+                                <option value="">— none —</option>
+                                <option th:each="sec : ${allSectors}" th:value="${sec}" th:text="${sec}" th:selected="${sec == s.sector}"></option>
+                            </select>
+                        </form>
+                    </td>
+                    <td><span class="pill" th:if="${s.sectorSource != null}" th:classappend="${s.sectorSource == 'AUTO'} ? 'warn' : 'good'" th:text="${s.sectorSource}"></span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
