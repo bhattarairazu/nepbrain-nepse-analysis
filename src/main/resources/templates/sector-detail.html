@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head(${name})}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <a class="muted small" th:href="@{/sectors(preset=${preset},group=${group})}">← All sectors</a>
+            <h1 th:text="${name}">Sector</h1>
+            <p th:if="${d != null}">
+                <span class="pill" th:classappend="${d.stat.quadrant.tone}" th:text="${d.stat.quadrant.label}"></span>
+                <span class="muted" th:text="${d.stat.quadrant.meaning}"></span>
+            </p>
+        </div>
+    </div>
+
+    <form th:replace="~{fragments/period-filter :: filter('/sector', ${name}, ${d != null} ? ${d.analysis.period} : null)}"></form>
+
+    <div th:if="${d == null}" class="card empty">No data for this sector in this period.</div>
+
+    <th:block th:if="${d != null}" th:with="s=${d.stat}, a=${d.analysis}">
+        <div class="tiles">
+            <div class="card tile">
+                <div class="k">Sector return</div>
+                <div class="v" th:classappend="${@fmt.tone(s.returnPct)}" th:text="${@fmt.pct(s.returnPct)}"></div>
+                <div class="s"><span th:text="${@fmt.decimal(s.relReturnPct, 1)}"></span> pts vs market (<span th:text="${@fmt.pct(a.marketReturnPct)}"></span>)</div>
+            </div>
+            <div class="card tile">
+                <div class="k">Turnover</div>
+                <div class="v" th:text="'Rs ' + ${@fmt.money(s.turnover)}"></div>
+                <div class="s"><span th:text="${@fmt.share(s.turnoverShare)}"></span> of the market
+                    <span th:if="${s.shareChangePts != null}" th:classappend="${@fmt.tone(s.shareChangePts)}"
+                          th:text="'(' + ${@fmt.decimal(s.shareChangePts, 1)} + ' pts)'"></span></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Breadth</div>
+                <div class="v" th:text="${@fmt.decimal(s.breadthUpPct, 0)} + '%'"></div>
+                <div class="s">of its stocks rose in the period</div>
+            </div>
+            <div class="card tile">
+                <div class="k">Trend score</div>
+                <div class="v" th:text="${s.score}"></div>
+                <div class="s" th:text="${s.top20Slots} + ' top-20 turnover day(s)'"></div>
+            </div>
+        </div>
+
+        <section class="card">
+            <h2>Top trending stocks in <span th:text="${name}"></span></h2>
+            <p class="sub">Score = 40% period return rank + 30% turnover growth vs the previous period + 15% days in the top-20 turnover
+                + 15% share of up days, ranked within the sector; −25 for warning patterns 2 or 5. Patterns are for the last session of the period.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th class="num">#</th><th>Symbol</th><th>Score</th><th class="num">Return</th><th class="num">vs sector</th>
+                        <th class="num">Turnover</th><th class="num">vs prev period</th><th class="num hide-sm">Share of sector</th>
+                        <th class="num hide-sm">Up days</th><th class="num">Top-20 days</th><th class="num">Last close</th>
+                        <th>Signals</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="x, st : ${d.stocks}">
+                        <td class="num rank" th:text="${st.count}"></td>
+                        <td class="sym"><a th:href="@{/stock/{sym}(sym=${x.symbol})}" th:text="${x.symbol}"></a><small th:text="${x.name}"></small></td>
+                        <td><span class="meter inline"><span th:style="'width:' + ${x.score} + '%'"></span></span> <b th:text="${x.score}"></b></td>
+                        <td class="num" th:style="${@fmt.heat(x.returnPct, 15)}"><b th:text="${@fmt.pct(x.returnPct)}"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.relToSectorPct)}" th:text="${@fmt.decimal(x.relToSectorPct, 1)} + ' pts'"></td>
+                        <td class="num" th:text="${@fmt.money(x.turnover)}"></td>
+                        <td class="num" th:classappend="${x.turnoverGrowth != null and x.turnoverGrowth >= 1.5} ? 'pos'" th:text="${@fmt.ratio(x.turnoverGrowth)}"></td>
+                        <td class="num hide-sm" th:text="${@fmt.share(x.shareOfSector)}"></td>
+                        <td class="num hide-sm" th:text="${x.upDays} + '/' + ${x.sessionsTraded}"></td>
+                        <td class="num" th:text="${x.top20Slots}"></td>
+                        <td class="num"><span th:text="${@fmt.price(x.lastClose)}"></span>
+                            <small th:classappend="${@fmt.tone(x.lastChangePct)}" th:text="${@fmt.pct(x.lastChangePct)}"></small></td>
+                        <td style="white-space:normal">
+                            <a th:each="pt : ${x.patterns}" class="pill" th:classappend="${pt.tone}" th:href="@{/patterns} + '#p' + ${pt.number}"
+                               th:text="'P' + ${pt.number}" th:title="${pt.title}"></a>
+                            <span class="muted small" th:text="${#strings.listJoin(x.highlights, ' · ')}"></span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card" style="margin-top:16px">
+            <h2><span th:text="${name}"></span> vs the market</h2>
+            <p class="sub">Equal-weight index rebased to 100 at the start of the period, with the sector's share of market turnover per
+                <span th:text="${#strings.toLowerCase(a.grouping) == 'monthly'} ? 'month' : 'week'"></span>.</p>
+            <div class="grid-2">
+                <div class="chart-box"><canvas id="idxChart"></canvas></div>
+                <div class="chart-box"><canvas id="shareChart"></canvas></div>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const chart = /*[[${chart}]]*/ {};
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                const c = n => css.getPropertyValue(n).trim();
+                Chart.defaults.color = c('--muted');
+                Chart.defaults.borderColor = c('--border');
+                const s = chart.sectors[0];
+                new Chart(document.getElementById('idxChart'), {
+                    type: 'line',
+                    data: { labels: chart.dates, datasets: [
+                        { label: s.name, data: s.index, borderColor: c('--accent'), borderWidth: 2.5, pointRadius: 0, tension: 0.15 },
+                        { label: 'Market', data: chart.market, borderColor: c('--muted'), borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
+                    ] },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
+                });
+                new Chart(document.getElementById('shareChart'), {
+                    type: 'bar',
+                    data: { labels: chart.buckets, datasets: [
+                        { label: 'Share of market turnover (%)', data: s.bucketShare.map(v => v == null ? null : v * 100),
+                          backgroundColor: c('--accent'), borderRadius: 3, maxBarThickness: 36 }
+                    ] },
+                    options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } } }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

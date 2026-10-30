@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- Period filter shared by the sector pages. `path` = form action, `sectorName` = hidden sector (or null). -->
+<form th:fragment="filter(path, sectorName, period)" class="card filter" method="get" th:action="@{${path}}">
+    <input type="hidden" name="name" th:if="${sectorName != null}" th:value="${sectorName}">
+    <label>
+        <span>Period</span>
+        <select name="preset" id="preset">
+            <option th:each="p : ${presets}" th:value="${p[0]}" th:text="${p[1]}" th:selected="${p[0] == preset}"></option>
+        </select>
+    </label>
+    <label>
+        <span>From</span>
+        <input type="date" name="from" class="pdate" th:value="${period != null} ? ${period.from} : ''" th:min="${earliest}" th:max="${latest}">
+    </label>
+    <label>
+        <span>To</span>
+        <input type="date" name="to" class="pdate" th:value="${period != null} ? ${period.to} : ''" th:min="${earliest}" th:max="${latest}">
+    </label>
+    <label>
+        <span>Group by</span>
+        <span class="seg radio">
+            <label th:classappend="${group.name() == 'WEEKLY'} ? 'on'"><input type="radio" name="group" value="WEEKLY" th:checked="${group.name() == 'WEEKLY'}"> Weekly</label>
+            <label th:classappend="${group.name() == 'MONTHLY'} ? 'on'"><input type="radio" name="group" value="MONTHLY" th:checked="${group.name() == 'MONTHLY'}"> Monthly</label>
+        </span>
+    </label>
+    <button class="btn primary" type="submit">Apply</button>
+    <span class="muted small" th:if="${period != null}"
+          th:text="${period.sessions} + ' trading sessions stored in this period' + (${earliest != null} ? ' · data from ' + ${@fmt.day(earliest)} : '')"></span>
+    <script>
+        (function () {
+            const form = document.currentScript.closest('form');
+            form.querySelectorAll('.pdate').forEach(i => i.addEventListener('change', () => { form.querySelector('#preset').value = 'custom'; }));
+            form.querySelector('#preset').addEventListener('change', e => { if (e.target.value !== 'custom') form.submit(); });
+            form.querySelectorAll('input[name=group]').forEach(i => i.addEventListener('change', () => form.submit()));
+        })();
+    </script>
+</form>
+</body>
+</html>

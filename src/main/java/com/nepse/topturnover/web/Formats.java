@@ -62,6 +62,19 @@ public class Formats {
         return v > 0 ? "pos" : "neg";
     }
 
+    /** Inline background for heatmap cells: green for positive, red for negative, full colour at |v| >= full. */
+    public String heat(Double v, double full) {
+        if (v == null || v == 0 || full <= 0) return "";
+        double a = Math.min(Math.abs(v) / full, 1) * 0.55;
+        return String.format(Locale.ROOT, "background: rgba(%s, %.2f)", v > 0 ? "18, 134, 74" : "207, 51, 41", a);
+    }
+
+    /** Inline background for a 0..1 share (blue). */
+    public String shade(Double v, double full) {
+        if (v == null || v <= 0 || full <= 0) return "";
+        return String.format(Locale.ROOT, "background: rgba(47, 91, 234, %.2f)", Math.min(v / full, 1) * 0.5);
+    }
+
     public String day(LocalDate d) {
         return d == null ? "—" : DAY.format(d);
     }

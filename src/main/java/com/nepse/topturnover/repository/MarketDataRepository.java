@@ -39,6 +39,10 @@ public class MarketDataRepository {
         return Optional.ofNullable(jdbc.queryForObject("SELECT MAX(trade_date) FROM trading_day", LocalDate.class));
     }
 
+    public Optional<LocalDate> earliestDay() {
+        return Optional.ofNullable(jdbc.queryForObject("SELECT MIN(trade_date) FROM trading_day", LocalDate.class));
+    }
+
     /** The most recent `n` stored sessions on or before `day`, newest first. */
     public List<LocalDate> sessionsUpTo(LocalDate day, int n) {
         return jdbc.queryForList(

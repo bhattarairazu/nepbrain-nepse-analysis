@@ -135,7 +135,7 @@
             <section class="card">
                 <h2>Where money flowed this week</h2>
                 <p class="sub">Share of the top-20 turnover slots. <a th:href="@{/sectors}">Full sector view →</a></p>
-                <p th:if="${!r.sectorsAssigned}" class="muted">No sectors assigned yet. <a th:href="@{/sectors}">Assign them</a> to enable this.</p>
+                <p th:if="${!r.sectorsAssigned}" class="muted">No sectors assigned yet. <a th:href="@{/sectors/manage}">Assign them</a> to enable this.</p>
                 <table th:if="${r.sectorsAssigned}">
                     <tbody>
                     <tr th:each="s : ${r.sectorsThisWeek}">

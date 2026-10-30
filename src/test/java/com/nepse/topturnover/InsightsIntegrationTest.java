@@ -52,6 +52,7 @@ class InsightsIntegrationTest {
     @Autowired FeatureService features;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Autowired com.nepse.topturnover.analysis.SectorAnalysisService sectorAnalysis;
 
     @BeforeAll
     void seed() {
@@ -102,8 +103,7 @@ class InsightsIntegrationTest {
     void newPagesRender() throws Exception {
         mvc.perform(get("/ideas")).andExpect(status().isOk()).andExpect(content().string(containsString("BRK")));
         mvc.perform(get("/patterns")).andExpect(status().isOk()).andExpect(content().string(containsString("OPR")));
-        mvc.perform(get("/sectors")).andExpect(status().isOk());
-        mvc.perform(get("/sectors").param("show", "all")).andExpect(status().isOk()).andExpect(content().string(containsString("AUTO")));
+        mvc.perform(get("/sectors/manage").param("show", "all")).andExpect(status().isOk()).andExpect(content().string(containsString("AUTO")));
         mvc.perform(get("/trade-size")).andExpect(status().isOk()).andExpect(content().string(containsString("BLK")));
         mvc.perform(get("/market")).andExpect(status().isOk()).andExpect(content().string(containsString("Equal-weight")));
         mvc.perform(get("/stock/BRK")).andExpect(status().isOk()).andExpect(content().string(containsString("Pattern 1")));
@@ -111,6 +111,42 @@ class InsightsIntegrationTest {
         mvc.perform(post("/sectors/assign").param("symbol", "CHN").param("sector", "Commercial Bank"))
                 .andExpect(status().is3xxRedirection());
         assertEquals("MANUAL", jdbc.queryForObject("SELECT sector_source FROM stock WHERE symbol='CHN'", String.class));
+    }
+
+    @Test
+    void sectorAnalysisFindsThePlantedHydropowerTrend() {
+        var period = sectorAnalysis.period("1m", null, null).orElseThrow();
+        assertEquals(23, period.sessions()); // 5 Aug - 4 Sep, weekdays only
+        var a = sectorAnalysis.analyse(period, com.nepse.topturnover.analysis.SectorAnalysisService.Grouping.WEEKLY).orElseThrow();
+        assertEquals("Hydropower", a.sectors().get(0).sector(), a.sectors().toString());
+        assertEquals(com.nepse.topturnover.analysis.SectorAnalysisService.Quadrant.LEADING, a.sectors().get(0).quadrant());
+        var micro = a.sector("Microfinance").orElseThrow();
+        assertTrue(micro.returnPct() < a.marketReturnPct());
+        assertTrue(a.buckets().size() >= 4);
+
+        var custom = sectorAnalysis.period("custom", a.dates().get(5), a.dates().get(9)).orElseThrow();
+        assertEquals(5, custom.sessions());
+        var monthly = sectorAnalysis.analyse(period, com.nepse.topturnover.analysis.SectorAnalysisService.Grouping.MONTHLY).orElseThrow();
+        assertTrue(monthly.buckets().size() <= 2);
+
+        var d = sectorAnalysis.detail("Hydropower", period, com.nepse.topturnover.analysis.SectorAnalysisService.Grouping.WEEKLY).orElseThrow();
+        assertTrue(d.stocks().size() >= 5);
+        assertTrue(d.stocks().get(0).score() >= d.stocks().get(d.stocks().size() - 1).score());
+        var opr = d.stocks().stream().filter(x -> x.symbol().equals("OPR")).findFirst().orElseThrow();
+        assertTrue(opr.highlights().stream().anyMatch(h -> h.contains("warning")), "pattern 5 must be penalised");
+    }
+
+    @Test
+    void sectorPagesRender() throws Exception {
+        mvc.perform(get("/sectors")).andExpect(status().isOk()).andExpect(content().string(containsString("Hydropower")));
+        mvc.perform(get("/sectors").param("preset", "1w").param("group", "MONTHLY")).andExpect(status().isOk());
+        mvc.perform(get("/sectors").param("preset", "custom").param("from", "2026-07-01").param("to", "2026-08-15"))
+                .andExpect(status().isOk()).andExpect(content().string(containsString("Week by week")));
+        mvc.perform(get("/sector").param("name", "Hotel & Tourism").param("preset", "3m")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("Top trending stocks")));
+        mvc.perform(get("/sector").param("name", "No Such Sector")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("No data for this sector")));
+        mvc.perform(get("/sectors/manage").param("show", "all")).andExpect(status().isOk());
     }
 
     private static List<String> symbols(List<InsightService.PatternGroup> groups, Pattern p) {

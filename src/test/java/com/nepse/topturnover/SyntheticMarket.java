@@ -17,6 +17,7 @@ import com.nepse.topturnover.model.StockQuote;
  * per pattern, planted on the last session:
  * BRK base breakout, CLX climax after a run-up, CAP capitulation, CHN churn, BLK block deal,
  * OPR upper-circuit run on fading volume, RTL retail frenzy, INST larger trades building.
+ * Sector trend: Hydropower stocks rise on growing volume in the last 15 sessions, Microfinance stocks drift down.
  */
 public final class SyntheticMarket {
     public static final int DAYS = 70;
@@ -93,11 +94,14 @@ public final class SyntheticMarket {
         return base * (0.8 + rnd.nextDouble() * 0.4);
     }
 
+    /** Hydropower trends up on rising volume over the last 15 sessions; Microfinance drifts down. */
     private void normal(String sym, String name) {
         double p = 200 + rnd.nextInt(600), base = 20_000 + rnd.nextInt(80_000);
         for (int i = 0; i < DAYS; i++) {
-            double next = p * (1 + (rnd.nextDouble() - 0.5) * 0.02);
-            add(sym, name, p, next, noisyVol(base), 1, null, null, null);
+            boolean late = i >= DAYS - 15;
+            double drift = late && name.contains("Hydropower") ? 0.006 : late && name.contains("Laghubitta") ? -0.004 : 0;
+            double next = p * (1 + (rnd.nextDouble() - 0.5) * 0.02 + drift);
+            add(sym, name, p, next, noisyVol(base) * (late && name.contains("Hydropower") ? 1.6 : 1), 1, null, null, null);
             p = next;
         }
     }

@@ -86,14 +86,14 @@ public class InsightsController {
         return "trade-size";
     }
 
-    @GetMapping("/sectors")
-    public String sectors(@RequestParam(defaultValue = "unassigned") String show, Model model) {
+    @GetMapping("/sectors/manage")
+    public String manageSectors(@RequestParam(defaultValue = "unassigned") String show, Model model) {
         common(model, "sectors");
         model.addAttribute("flow", insights.sectorFlow(null));
         model.addAttribute("show", show);
         model.addAttribute("stocks", repo.stocks(show));
         model.addAttribute("allSectors", Sectors.ALL);
-        return "sectors";
+        return "sectors-manage";
     }
 
     @PostMapping("/sectors/assign")
@@ -106,7 +106,7 @@ public class InsightsController {
             features.evict();
             flash.addFlashAttribute("message", symbol + " → " + (sector == null || sector.isBlank() ? "no sector" : sector));
         }
-        return "redirect:/sectors?show=" + show + "#stocks";
+        return "redirect:/sectors/manage?show=" + show + "#stocks";
     }
 
     @PostMapping("/sectors/auto")
@@ -114,7 +114,7 @@ public class InsightsController {
         int n = repo.autoAssignSectors();
         features.evict();
         flash.addFlashAttribute("message", "Guessed sectors for " + n + " stock(s) from their company names. Review the ones marked AUTO.");
-        return "redirect:/sectors?show=auto#stocks";
+        return "redirect:/sectors/manage?show=auto#stocks";
     }
 
     @PostMapping("/sectors/import")
@@ -131,7 +131,7 @@ public class InsightsController {
         int n = repo.importSectors(map);
         features.evict();
         flash.addFlashAttribute("message", "Imported " + n + " sector(s)" + (skipped > 0 ? "; skipped " + skipped + " line(s) with unknown sector names" : ""));
-        return "redirect:/sectors?show=all#stocks";
+        return "redirect:/sectors/manage?show=all#stocks";
     }
 
     /** Rule thresholds shown on the Patterns page. */

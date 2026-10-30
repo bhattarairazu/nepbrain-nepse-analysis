@@ -46,7 +46,7 @@ The Mac must be on and the app running at crawl time. A missed day can't be fetc
 |---|---|
 | **★ Ideas** | The daily routine, automated: market regime → active today (top-20 turnover or volume ≥ 2× normal) → closed up near the high → extended/risky moves removed → candidates scored 0–100 with every reason shown, a suggested stop, and links to the chart and the ShareSansar floorsheet. Also "setups forming" (tight bases near a breakout) and what was removed and why. |
 | **Patterns** | The five volume patterns for every ordinary share: 1 breakout from a quiet base, 2 climax after a run-up, 3 capitulation at the lows, 4 high volume with no price progress, 5 upper-circuit run on fading volume, each with the evidence. |
-| **Sectors** | Share of the top-20 turnover slots per sector, week by week for 5 weeks (sector rotation), plus sector management. |
+| **Sectors** | Sector analysis for any period (1 week to 1 year, or custom from–to dates), grouped weekly or monthly: return vs market, turnover share and its change, breadth, top-20 days, a trend score, and Leading / Improving / Weakening / Lagging status; sector index chart and heatmaps. Click a sector for its top trending stocks. Sector assignments are under Sectors → Manage sectors. |
 | **Trade size** | Turnover ÷ trades: larger trades building (bigger investors), retail frenzy, possible block deals, and a table for the top 20. |
 | **Daily lists** | Top 20 by turnover and by volume with RVOL, price + volume signal, close position, streaks and new entries. |
 | **Money flow** | Which stocks keep appearing over 5/10/20/60 sessions. |
@@ -70,8 +70,10 @@ Until then the pages say what is missing.
 - ShareSansar's price table has no sector column, so after each crawl the app **guesses sectors from company names**
   (about 94% of stocks on a real page). Guesses are marked AUTO. Fix the rest on the Sectors page or import a
   `SYMBOL,Sector` CSV. Your choices are marked MANUAL and are never overwritten.
-- The official NEPSE index isn't on the crawled page, so the Market page uses an **equal-weight index**
-  (average daily % change of ordinary shares). It shows the broad direction but is not the official number.
+- nepalstock.com is not used: its data API is token-protected and blocks automated browsers, and getting around that would
+  defeat protections NEPSE put there deliberately.
+- The official NEPSE index and sub-indices aren't on the crawled page, so the Market and Sectors pages use **equal-weight indices**
+  (average daily % change of the stocks). They show direction but are not the official numbers.
 
 ### Try the UI with demo data
 To see every page working before real history exists, fill a separate database with a synthetic market:
