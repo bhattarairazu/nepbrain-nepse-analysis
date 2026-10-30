@@ -1,0 +1,8 @@
+# NEPSE market holidays (Nepal time, AD dates).
+# One date per line (YYYY-MM-DD) or a range (YYYY-MM-DD..YYYY-MM-DD). Text after # is ignored.
+# Add dates from NEPSE's holiday notices. Unlisted holidays are still detected automatically:
+# the crawler skips a day when the website still shows the previous session's date or data.
+
+# Example:
+# 2026-12-25            # Christmas
+# 2026-10-19..2026-10-23 # Dashain closure
