@@ -54,11 +54,13 @@ class InsightsIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired com.nepse.topturnover.analysis.SectorAnalysisService sectorAnalysis;
     @Autowired com.nepse.topturnover.analysis.SignalService signalService;
+    @Autowired com.nepse.topturnover.analysis.BacktestService backtest;
 
     @BeforeAll
     void seed() {
         seedInto(jdbc, repo);
         features.evict();
+        backtest.evict();
     }
 
     /** Also used by DemoDataSeeder. */
@@ -172,6 +174,32 @@ class InsightsIntegrationTest {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.symbol").value("BRK"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.dates.length()").value(30))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.ema20[29]").isNumber());
+    }
+
+    @Test
+    void backtestUsesOnlyPastDataAndRendersThePage() throws Exception {
+        var dates = new SyntheticMarket().dates();
+        java.time.LocalDate past = dates.get(40);
+        // the backtest's view of a past day must equal the live analysis of that day (no look-ahead)
+        var replay = backtest.caseStudy("CHN", past).orElseThrow();
+        var live = features.snapshot(past).orElseThrow().features().get("CHN");
+        assertEquals(live.rvol(), replay.f().rvol(), 1e-9);
+        assertEquals(live.ema20(), replay.f().ema20(), 1e-9);
+        assertEquals(live.turnoverRank(), replay.f().turnoverRank());
+
+        var lastDay = backtest.caseStudy("BRK", dates.get(dates.size() - 1)).orElseThrow();
+        assertTrue(lastDay.fired().contains(com.nepse.topturnover.analysis.BacktestService.Strategy.BASE_BREAKOUT));
+        assertTrue(lastDay.forward().isEmpty(), "no future data after the last session");
+
+        var r = backtest.run(5).orElseThrow();
+        assertEquals(com.nepse.topturnover.analysis.BacktestService.Strategy.values().length, r.strategies().size());
+        var all = r.strategies().stream().filter(s -> s.strategy().name().equals("TOP20_ALL")).findFirst().orElseThrow();
+        assertTrue(all.trades() > 100);
+        for (var s : r.strategies()) for (var tr : s.latest()) assertTrue(tr.entryDate().isAfter(tr.signalDate()));
+
+        mvc.perform(get("/backtest").param("h", "5").param("symbols", "BRK, CHN").param("date", dates.get(dates.size() - 1).toString()))
+                .andExpect(status().isOk()).andExpect(content().string(containsString("Strategy results")))
+                .andExpect(content().string(containsString("Breakout from a quiet base")));
     }
 
     private static List<String> symbols(List<InsightService.PatternGroup> groups, Pattern p) {

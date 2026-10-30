@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Backtest')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Backtest</h1>
+            <p>Every strategy replayed on every stored session using only what was known that day. A signal after the close
+                buys at the <b>next session's open</b>, sells at the close <span th:text="${h}"></span> sessions later, pays
+                <span th:text="${cost}"></span>% round-trip costs, and is compared with the equal-weight market over the same days.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="seg">
+                <a th:each="x : ${ {2, 5, 10} }" th:href="@{/backtest(h=${x},filter=${filter},symbols=${symbols},date=${caseDate})}"
+                   th:classappend="${h == x} ? 'on'" th:text="'Hold ' + ${x} + ' sessions'"></a>
+            </span>
+            <span class="seg">
+                <a th:href="@{/backtest(h=${h},filter=false,symbols=${symbols},date=${caseDate})}" th:classappend="${!filter} ? 'on'">Every day</a>
+                <a th:href="@{/backtest(h=${h},filter=true,symbols=${symbols},date=${caseDate})}" th:classappend="${filter} ? 'on'"
+                   title="Only take signals when the equal-weight market is above its 20-session average">Only when market is up</a>
+            </span>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored sessions to backtest yet (needs about 30). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note">
+            Data: <b th:text="${r.sessions}"></b> sessions (<span th:text="${@fmt.day(r.from)}"></span> → <span th:text="${@fmt.day(r.to)}"></span>),
+            <span th:text="${r.stocks}"></span> stocks. A strategy is marked <b>Confident</b> only with ≥ <span th:text="${bar[0]}"></span> trades,
+            ≥ <span th:text="${bar[1]}"></span>% winners, beating the market by ≥ <span th:text="${barExcess}"></span>% per trade on average,
+            a positive median, and beating the market in <b>both halves</b> of the period. Past results don't guarantee future ones.
+        </div>
+
+        <!-- recommendations -->
+        <section class="card block">
+            <h2>Recommendations for the next session</h2>
+            <th:block th:if="${r.confident().isEmpty()}">
+                <p><b>No strategy passed the confidence bar at this holding period</b>, so there are no recommendations.
+                    That's the honest result for this much history. Look at "Promising, not proven" strategies below and keep
+                    collecting data; the test re-runs automatically as sessions are added.</p>
+            </th:block>
+            <th:block th:unless="${r.confident().isEmpty()}">
+                <p class="note" th:if="${r.marketFilter and !r.marketUpToday}">These strategies were tested with the market filter, and the market is
+                    <b>below</b> its 20-session average today, so the rule says <b>don't buy</b>; the signals are shown for watching only.</p>
+                <p class="sub">Today's (<span th:text="${@fmt.day(r.latestDate)}"></span>) signals from strategies that passed the bar.
+                    Buy at the next open only if it doesn't gap more than 3% higher; stop 8% below or under the 10-session low.</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Stock</th><th>Strategy</th><th class="num">Close</th><th class="num">Change</th><th class="num">Volume vs normal</th>
+                            <th class="num">Stop</th><th class="num">Strategy record</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${r.recommendations().isEmpty()}"><td colspan="7" class="muted">The proven strategies have no signal in the latest session.</td></tr>
+                        <tr th:each="rec : ${r.recommendations()}" th:with="sig=${rec.signal}, sr=${rec.record}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${sig.f.symbol})}" th:text="${sig.f.symbol}"></a><small th:text="${sig.f.sector}"></small></td>
+                            <td><span class="pill good" th:text="${sig.strategy.title}"></span></td>
+                            <td class="num" th:text="${@fmt.price(sig.f.close)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(sig.f.changePct)}" th:text="${@fmt.pct(sig.f.changePct)}"></td>
+                            <td class="num" th:text="${@fmt.ratio(sig.f.rvol)}"></td>
+                            <td class="num neg" th:text="${@fmt.price(rec.stop)}"></td>
+                            <td class="num small" th:text="${@fmt.decimal(sr.winRate, 0)} + '% wins, ' + ${@fmt.pct(sr.avgExcess)} + ' vs market'"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </th:block>
+        </section>
+
+        <!-- strategy table -->
+        <section class="card block">
+            <h2>Strategy results · hold <span th:text="${h}"></span> sessions</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Strategy</th><th class="num">Trades</th><th class="num">Win rate</th><th class="num">Avg return</th>
+                        <th class="num">Median</th><th class="num">Avg vs market</th><th class="num">1st half</th><th class="num">2nd half</th>
+                        <th class="num">Profit factor</th><th class="num">Best / worst</th><th>Verdict</th></tr></thead>
+                    <tbody>
+                    <tr th:each="s : ${r.strategies}">
+                        <td style="white-space:normal;min-width:240px"><b th:text="${s.strategy.title}"></b><br><small class="muted" th:text="${s.strategy.rule}"></small></td>
+                        <td class="num" th:text="${s.trades}"></td>
+                        <td class="num" th:text="${s.trades > 0} ? ${@fmt.decimal(s.winRate, 0)} + '%' : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(s.avgNet)}" th:text="${s.trades > 0} ? ${@fmt.pct(s.avgNet)} : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(s.medianNet)}" th:text="${s.trades > 0} ? ${@fmt.pct(s.medianNet)} : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(s.avgExcess, 4)}"><b th:text="${s.trades > 0} ? ${@fmt.pct(s.avgExcess)} : '—'"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(s.excessFirstHalf)}" th:text="${@fmt.pct(s.excessFirstHalf)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(s.excessSecondHalf)}" th:text="${@fmt.pct(s.excessSecondHalf)}"></td>
+                        <td class="num" th:text="${s.trades > 0} ? ${@fmt.decimal(s.profitFactor, 2)} : '—'"></td>
+                        <td class="num small" th:text="${s.trades > 0} ? ${@fmt.pct(s.best)} + ' / ' + ${@fmt.pct(s.worst)} : '—'"></td>
+                        <td><span class="pill" th:classappend="${s.tone}" th:text="${s.verdict}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- case study -->
+        <section class="card block">
+            <h2>What did the rules say on a given day?</h2>
+            <p class="sub">Check a past move, e.g. GBIME and LBBL on 2026-10-28: which strategies fired with only that day's information, and what happened next.</p>
+            <form class="inline" method="get" th:action="@{/backtest}">
+                <input type="hidden" name="h" th:value="${h}">
+                <input type="hidden" name="filter" th:value="${filter}">
+                <input type="text" name="symbols" th:value="${symbols != '' ? symbols : 'GBIME, LBBL'}" style="font:inherit;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:220px">
+                <input type="date" name="date" th:value="${caseDate != null ? caseDate : '2026-10-28'}">
+                <button class="btn primary" type="submit">Check</button>
+            </form>
+            <div class="table-wrap" th:if="${!cases.isEmpty()}" style="margin-top:12px">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Change</th><th class="num">Volume vs normal</th>
+                        <th class="num">Close in range</th><th class="num">Turnover</th><th>Strategies that fired</th>
+                        <th class="num">+1</th><th class="num">+2</th><th class="num">+5</th><th class="num">+10</th></tr></thead>
+                    <tbody>
+                    <tr th:each="c : ${cases}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${c.symbol})}" th:text="${c.symbol}"></a><small th:text="${@fmt.day(c.date)}"></small></td>
+                        <td class="num" th:text="${@fmt.price(c.f.close)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(c.f.changePct)}" th:text="${@fmt.pct(c.f.changePct)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(c.f.rvol)}"></td>
+                        <td class="num" th:text="${@fmt.share(c.f.closeInRange)}"></td>
+                        <td class="num" th:text="${@fmt.money(c.f.turnover)}"></td>
+                        <td style="white-space:normal">
+                            <span th:each="st : ${c.fired}" class="pill good" style="margin:1px" th:text="${st.title}"></span>
+                            <span th:if="${c.fired.isEmpty()}" class="muted">None</span>
+                            <small class="muted" th:each="n : ${c.notes}" th:text="' ' + ${n}"></small>
+                        </td>
+                        <td class="num" th:each="k : ${ {1, 2, 5, 10} }" th:classappend="${@fmt.tone(c.forward.get(k))}"
+                            th:text="${c.forward.get(k) != null} ? ${@fmt.pct(c.forward.get(k))} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="muted small">+1/+2/+5/+10 = change from that day's close to the close 1, 2, 5, 10 sessions later (before costs).</p>
+            </div>
+        </section>
+
+        <!-- trades per strategy -->
+        <section class="card block" th:each="s : ${r.strategies}" th:if="${s.trades > 0 and s.strategy.name() != 'TOP20_ALL'}">
+            <h2 th:text="${s.strategy.title}"></h2>
+            <div class="grid-2">
+                <div>
+                    <h4>Best trades</h4>
+                    <table>
+                        <thead><tr><th>Stock</th><th>Signal</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Net</th><th class="num">vs market</th></tr></thead>
+                        <tbody>
+                        <tr th:each="t : ${s.bestTrades}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a></td>
+                            <td th:text="${t.signalDate}"></td>
+                            <td class="num" th:text="${@fmt.price(t.entry)}"></td>
+                            <td class="num" th:text="${@fmt.price(t.exit)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.excessPct)}" th:text="${@fmt.pct(t.excessPct)}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div>
+                    <h4>Most recent trades</h4>
+                    <table>
+                        <thead><tr><th>Stock</th><th>Signal</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Net</th><th class="num">vs market</th></tr></thead>
+                        <tbody>
+                        <tr th:each="t : ${s.latest}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a></td>
+                            <td th:text="${t.signalDate}"></td>
+                            <td class="num" th:text="${@fmt.price(t.entry)}"></td>
+                            <td class="num" th:text="${@fmt.price(t.exit)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.excessPct)}" th:text="${@fmt.pct(t.excessPct)}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

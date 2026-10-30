@@ -1,0 +1,71 @@
+# Sunrise ERP on a DigitalOcean droplet: the app only. MySQL is an existing server
+# (managed database or another droplet on the VPC); files stay on a local volume.
+# A web server on the host (nginx) terminates HTTPS and proxies to 127.0.0.1:8082.
+#
+# From the repository root:
+#   docker compose up -d --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: nepbrain-nepse-analysis
+
+    restart: unless-stopped
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # The app listens on 8082 inside the container (Spring's default is 8080).
+      SERVER_PORT: "8083"
+
+      DB_URL: jdbc:mysql://10.122.0.4:3306/nepbrain_nepse_analysis?serverTimezone=UTC&characterEncoding=UTF-8&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true
+      DB_USERNAME: nepbrain
+      DB_PASSWORD: Nepbrain@10
+
+      # Attachments and report exports, on the app-files volume.
+      ERP_STORAGE_ROOT: /app/data/files
+
+      # nginx in front: trust X-Forwarded-* for https, redirects and client IPs.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      # The prod session cookie is Secure (HTTPS only). Set false only while testing over plain http.
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: ${COOKIE_SECURE:-false}
+
+      # No Zipkin server: keep trace ids in the logs, export nothing.
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.0"
+
+      TZ: Asia/Kathmandu
+
+      JAVA_TOOL_OPTIONS: >
+        -Xms${JVM_XMS:-512m}
+        -Xmx${JVM_XMX:-1536m}
+        -XX:+UseG1GC
+        -XX:+ExitOnOutOfMemoryError
+
+    volumes:
+      - app-files:/app/data
+
+    ports:
+      - "8083:8083"
+#      - "127.0.0.1:${APP_PORT:-8082}:8082"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8082/actuator/health/liveness || exit 1"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  app-files:

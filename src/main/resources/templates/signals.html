@@ -30,6 +30,15 @@
             <h2><span class="step-no sm">2</span> Buy setups now <span class="muted small" th:text="${s.buyNow.size()} + ' stock(s)'"></span></h2>
             <p class="sub">Passed every filter today. Entry near the last close; don't chase if it opens more than 3% higher.
                 Targets are 2× and 3× the risk (entry − stop).</p>
+            <div class="note" th:if="${record != null}">
+                <b>Track record of these rules</b> (backtest over <span th:text="${recordSessions}"></span> sessions, buy next open, hold 5 sessions, after costs):
+                <th:block th:each="k : ${ {'BASE_BREAKOUT', 'STRONG_IDEA'} }" th:with="x=${record.get(k)}">
+                    <br><span th:text="${x.strategy.title}"></span>: <span th:text="${x.trades}"></span> trades,
+                    <span th:text="${@fmt.decimal(x.winRate, 0)}"></span>% winners, <span th:text="${@fmt.pct(x.avgExcess)}"></span> vs market per trade —
+                    <span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span>
+                </th:block>
+                <br>Treat these as candidates to check, not proven buys. Details on <a th:href="@{/backtest}">Backtest</a>.
+            </div>
             <div class="table-wrap">
                 <table class="plans">
                     <thead><tr><th>Stock</th><th>Setup</th><th class="num">Entry</th><th class="num">Stop</th>
@@ -55,6 +64,15 @@
         <section class="card block">
             <h2><span class="step-no sm">3</span> Next possible entries <span class="muted small" th:text="${s.nextEntries.size()} + ' stock(s)'"></span></h2>
             <p class="sub">Not yet. Set a price alert at the trigger; buy only if the condition happens. Sorted by how close the trigger is.</p>
+            <div class="note" th:if="${record != null}">
+                <b>Track record of these rules</b> (backtest over <span th:text="${recordSessions}"></span> sessions, buy next open, hold 5 sessions, after costs):
+                <th:block th:each="k : ${ {'BASE_TRIGGER', 'PULLBACK_TRIGGER'} }" th:with="x=${record.get(k)}">
+                    <br><span th:text="${x.strategy.title}"></span>: <span th:text="${x.trades}"></span> trades,
+                    <span th:text="${@fmt.decimal(x.winRate, 0)}"></span>% winners, <span th:text="${@fmt.pct(x.avgExcess)}"></span> vs market per trade —
+                    <span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span>
+                </th:block>
+                <br>Treat these as candidates to check, not proven buys. Details on <a th:href="@{/backtest}">Backtest</a>.
+            </div>
             <div class="table-wrap">
                 <table class="plans">
                     <thead><tr><th>Stock</th><th>Setup</th><th>Buy when…</th><th class="num">Now</th><th class="num">Trigger</th>

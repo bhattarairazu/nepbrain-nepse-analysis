@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
+import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.Indicators;
 import com.nepse.topturnover.analysis.SignalService;
 
@@ -24,16 +25,25 @@ import com.nepse.topturnover.analysis.SignalService;
 public class SignalsController {
     private final SignalService signals;
     private final NamedParameterJdbcTemplate jdbc;
+    private final BacktestService backtest;
 
-    public SignalsController(SignalService signals, NamedParameterJdbcTemplate jdbc) {
+    public SignalsController(SignalService signals, NamedParameterJdbcTemplate jdbc, BacktestService backtest) {
         this.signals = signals;
         this.jdbc = jdbc;
+        this.backtest = backtest;
     }
 
     @GetMapping("/signals")
     public String signals(Model model) {
         model.addAttribute("active", "signals");
         signals.signals().ifPresent(s -> model.addAttribute("s", s));
+        // the historical record of the rules behind each section (5-session hold), so signals are read with evidence
+        backtest.run(5).ifPresent(r -> {
+            Map<String, BacktestService.StrategyResult> rec = new LinkedHashMap<>();
+            r.strategies().forEach(x -> rec.put(x.strategy().name(), x));
+            model.addAttribute("record", rec);
+            model.addAttribute("recordSessions", r.sessions());
+        });
         return "signals";
     }
 
