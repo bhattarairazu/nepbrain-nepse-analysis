@@ -6,16 +6,18 @@
     <title th:text="${title} + ' · NEPSE Top Turnover'">NEPSE Top Turnover</title>
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+    <script th:src="@{/js/stock-popover.js}" defer></script>
 </head>
 <body>
 
 <header th:fragment="nav" class="topbar">
-    <a class="brand" th:href="@{/}">
+    <a class="brand" th:href="@{/signals}">
         <span class="logo" aria-hidden="true">▲</span>
         <span><b>NEPSE Top Turnover</b><small>Top 20 turnover &amp; volume analysis</small></span>
     </a>
     <nav>
-        <a th:href="@{/ideas}" th:classappend="${active == 'ideas'} ? 'on'">★ Ideas</a>
+        <a th:href="@{/signals}" th:classappend="${active == 'signals'} ? 'on'">▶ Signals</a>
+        <a th:href="@{/ideas}" th:classappend="${active == 'ideas'} ? 'on'">Ideas</a>
         <a th:href="@{/patterns}" th:classappend="${active == 'patterns'} ? 'on'">Patterns</a>
         <a th:href="@{/sectors}" th:classappend="${active == 'sectors'} ? 'on'">Sectors</a>
         <a th:href="@{/trade-size}" th:classappend="${active == 'tradesize'} ? 'on'">Trade size</a>

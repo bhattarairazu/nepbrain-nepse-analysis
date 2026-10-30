@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+    <!-- one rotation column -->
+    <th:block th:fragment="picks(list, emptyText)">
+        <p th:if="${list.isEmpty()}" class="muted" th:text="${emptyText}"></p>
+        <div class="pick" th:each="p : ${list}">
+            <div class="pick-head">
+                <a th:href="@{/sector(name=${p.sector},preset='1m')}"><b th:text="${p.sector}"></b></a>
+                <span class="muted small">
+                    month <span th:classappend="${@fmt.tone(p.return1m)}" th:text="${@fmt.pct(p.return1m)}"></span> ·
+                    week <span th:classappend="${@fmt.tone(p.return1w)}" th:text="${@fmt.pct(p.return1w)}"></span>
+                </span>
+            </div>
+            <p class="small" style="margin:4px 0 6px" th:text="${p.reason}"></p>
+            <div class="chips" th:if="${!p.stocks.isEmpty()}">
+                <span class="muted small">Leaders:</span>
+                <a class="chip" th:each="x : ${p.stocks}" th:href="@{/stock/{s}(s=${x.symbol})}"
+                   th:text="${x.symbol} + ' ' + ${@fmt.pct(x.returnPct)}"></a>
+            </div>
+        </div>
+    </th:block>
+</body>
+</html>

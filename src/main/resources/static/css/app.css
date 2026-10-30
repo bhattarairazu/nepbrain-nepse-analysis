@@ -244,3 +244,53 @@ a.pill:hover { text-decoration: none; filter: brightness(0.95); }
 .job h2 { display: flex; gap: 10px; align-items: center; }
 .joblog { margin: 0; padding-left: 18px; max-height: 220px; overflow-y: auto; font-size: 12.5px; color: var(--muted); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* ---------- signals page ---------- */
+.gate { display: flex; gap: 16px; align-items: center; border-left-width: 6px; margin-bottom: 16px; }
+.gate.good { border-left-color: var(--pos); } .gate.bad { border-left-color: var(--neg); } .gate.warn { border-left-color: var(--warn); }
+.gate .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.gate h2 { font-size: 22px; margin: 2px 0 4px; }
+.gate.good h2 { color: var(--pos); } .gate.bad h2 { color: var(--neg); } .gate.warn h2 { color: var(--warn); }
+.gate p { margin: 0; }
+.step-no { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 800; font-size: 18px; }
+.step-no.sm { display: inline-grid; width: 24px; height: 24px; font-size: 13px; vertical-align: 2px; margin-right: 4px; }
+.block { margin-bottom: 16px; }
+.block > h2 { display: flex; align-items: center; gap: 8px; }
+table.plans td { vertical-align: top; }
+td.why { white-space: normal; min-width: 220px; font-size: 12.5px; color: var(--muted); }
+td.why span { display: block; }
+td.why span::before { content: "• "; }
+.rotation { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.rot { border-top-width: 4px; }
+.rot.good { border-top-color: var(--pos); } .rot.warn { border-top-color: var(--warn); } .rot.bad { border-top-color: var(--neg); }
+.pick { padding: 10px 0; border-top: 1px solid var(--border); }
+.pick-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 1000px) { .rotation { grid-template-columns: 1fr; } }
+
+/* ---------- hover chart ---------- */
+.sp-pop { position: fixed; z-index: 60; display: none; width: 560px; max-width: calc(100vw - 16px);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 10px 12px; }
+.sp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.sp-name { color: var(--muted); font-size: 12.5px; }
+.sp-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sp-actions button, .sp-actions a { font: inherit; font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; }
+.sp-actions .on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.sp-actions .sp-out { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sp-chart { height: 270px; }
+.sp-na iframe { width: 100%; height: 270px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.sp-note { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.sp-empty { color: var(--muted); text-align: center; padding-top: 100px; margin: 0; }
+.sp-legend { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.sp-legend i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin: 0 4px 0 8px; }
+.sp-modal { position: fixed; inset: 0; z-index: 70; display: none; align-items: center; justify-content: center; background: rgba(10, 14, 20, .55); }
+.sp-modal-box { position: relative; width: min(1200px, 94vw); height: min(780px, 88vh); background: var(--surface);
+  border-radius: 14px; padding: 14px 18px; display: flex; flex-direction: column; }
+.sp-modal-box .sp-body { flex: 1; min-height: 0; }
+.sp-modal-box .sp-chart, .sp-modal-box .sp-na, .sp-modal-box .sp-na iframe { height: 100%; }
+.sp-modal-box .sp-na { display: flex; flex-direction: column; }
+.sp-modal-box .sp-na[hidden] { display: none; }
+.sp-modal-box .sp-na iframe { flex: 1; }
+.sp-close { position: absolute; top: -12px; right: -12px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px; }

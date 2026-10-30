@@ -44,7 +44,8 @@ The Mac must be on and the app running at crawl time. A missed day can't be fetc
 ## Dashboard
 | Page | What it answers |
 |---|---|
-| **★ Ideas** | The daily routine, automated: market regime → active today (top-20 turnover or volume ≥ 2× normal) → closed up near the high → extended/risky moves removed → candidates scored 0–100 with every reason shown, a suggested stop, and links to the chart and the ShareSansar floorsheet. Also "setups forming" (tight bases near a breakout) and what was removed and why. |
+| **▶ Signals** | The short answer page: (1) can I buy today (market verdict), (2) **buy setups now** with entry, max entry, stop, targets at 2× and 3× risk and why, (3) **next possible entries** with an exact trigger price to set an alert for (base about to break out, pullback to the 20-day EMA, or needs a second strong day), (4) **sector rotation**: money is here now / rotating in next / losing steam, each with leading stocks, (5) stocks to avoid or take profits on. |
+| **Ideas** | The daily routine, automated: market regime → active today (top-20 turnover or volume ≥ 2× normal) → closed up near the high → extended/risky moves removed → candidates scored 0–100 with every reason shown, a suggested stop, and links to the chart and the ShareSansar floorsheet. Also "setups forming" (tight bases near a breakout) and what was removed and why. |
 | **Patterns** | The five volume patterns for every ordinary share: 1 breakout from a quiet base, 2 climax after a run-up, 3 capitulation at the lows, 4 high volume with no price progress, 5 upper-circuit run on fading volume, each with the evidence. |
 | **Sectors** | Sector analysis for any period (1 week to 1 year, or custom from–to dates), grouped weekly or monthly: return vs market, turnover share and its change, breadth, top-20 days, a trend score, and Leading / Improving / Weakening / Lagging status; sector index chart and heatmaps. Click a sector for its top trending stocks. Sector assignments are under Sectors → Manage sectors. |
 | **Trade size** | Turnover ÷ trades: larger trades building (bigger investors), retail frenzy, possible block deals, and a table for the top 20. |
@@ -54,6 +55,12 @@ The Mac must be on and the app running at crawl time. A missed day can't be fetc
 
 Scores rank stocks **to research**; they are not buy signals. All thresholds live in
 `src/main/java/com/nepse/topturnover/analysis/Rules.java`.
+
+### Hover chart on every stock
+Hover any stock link for a quick candlestick chart (with 20/50-day EMA and volume) drawn from the stored data.
+**⤢** enlarges it, **NepseAlpha ↗** opens `https://nepsealpha.com/nepse-chart?symbol=…` in one reused browser tab, and
+**Details →** opens the stock page. The NepseAlpha tab tries to show their chart inside the popup, but NepseAlpha sends
+`X-Frame-Options: SAMEORIGIN` and sits behind a Cloudflare check, so it usually stays blank; use the ↗ button.
 
 ### History needed
 | Feature | Earlier sessions needed |

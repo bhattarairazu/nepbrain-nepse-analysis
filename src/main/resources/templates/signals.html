@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Signals')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1 th:text="${s != null} ? 'Signals · ' + ${@fmt.day(s.date)} : 'Signals'">Signals</h1>
+            <p>Four answers, from the stored data and the rules in this app: can you buy, what qualifies now, what to set alerts
+                for, and where sector money is rotating. Hover any stock for its chart. Rule-based signals to check, not advice.</p>
+        </div>
+    </div>
+
+    <div th:if="${s == null}" class="card empty">No data yet. Run a crawl or backfill from <a th:href="@{/crawl}">Data</a>.</div>
+
+    <th:block th:if="${s != null}">
+        <!-- 1. market -->
+        <section class="card gate" th:classappend="${s.gate.tone}">
+            <div class="step-no">1</div>
+            <div>
+                <div class="k">Can I buy today?</div>
+                <h2 th:text="${s.gate.verdict}"></h2>
+                <p><b th:text="${s.gate.advice}"></b> <span class="muted" th:text="${s.gate.detail}"></span></p>
+            </div>
+        </section>
+
+        <!-- 2. buy now -->
+        <section class="card block">
+            <h2><span class="step-no sm">2</span> Buy setups now <span class="muted small" th:text="${s.buyNow.size()} + ' stock(s)'"></span></h2>
+            <p class="sub">Passed every filter today. Entry near the last close; don't chase if it opens more than 3% higher.
+                Targets are 2× and 3× the risk (entry − stop).</p>
+            <div class="table-wrap">
+                <table class="plans">
+                    <thead><tr><th>Stock</th><th>Setup</th><th class="num">Entry</th><th class="num">Stop</th>
+                        <th class="num">Target 1</th><th class="num">Target 2</th><th class="num">Risk</th><th>Why</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${s.buyNow.isEmpty()}"><td colspan="8" class="muted">Nothing qualifies today. That's a valid answer: check the next-entry list instead.</td></tr>
+                    <tr th:each="p : ${s.buyNow}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.f.symbol})}" th:text="${p.f.symbol}"></a><small th:text="${p.f.sector}"></small></td>
+                        <td><span class="pill good" th:text="${p.setup}"></span><br><small class="muted" th:text="'Score ' + ${p.score}"></small></td>
+                        <td class="num"><b th:text="${@fmt.price(p.entry)}"></b><br><small class="muted" th:text="'max ' + ${@fmt.price(p.entryMax)}"></small></td>
+                        <td class="num neg" th:text="${@fmt.price(p.stop)}"></td>
+                        <td class="num pos" th:text="${@fmt.price(p.target1)}"></td>
+                        <td class="num pos" th:text="${@fmt.price(p.target2)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(p.riskPct, 1)} + '%'"></td>
+                        <td class="why"><span th:each="w : ${p.why}" th:text="${w}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. next entries -->
+        <section class="card block">
+            <h2><span class="step-no sm">3</span> Next possible entries <span class="muted small" th:text="${s.nextEntries.size()} + ' stock(s)'"></span></h2>
+            <p class="sub">Not yet. Set a price alert at the trigger; buy only if the condition happens. Sorted by how close the trigger is.</p>
+            <div class="table-wrap">
+                <table class="plans">
+                    <thead><tr><th>Stock</th><th>Setup</th><th>Buy when…</th><th class="num">Now</th><th class="num">Trigger</th>
+                        <th class="num">Away</th><th class="num">Stop</th><th class="num">Target 1</th><th>Why</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${s.nextEntries.isEmpty()}"><td colspan="9" class="muted">No setups forming yet (bases need 15+ stored sessions).</td></tr>
+                    <tr th:each="p : ${s.nextEntries}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.f.symbol})}" th:text="${p.f.symbol}"></a><small th:text="${p.f.sector}"></small></td>
+                        <td><span class="pill warn" th:text="${p.setup}"></span></td>
+                        <td style="white-space:normal;min-width:200px" th:text="${p.trigger}"></td>
+                        <td class="num" th:text="${@fmt.price(p.f.close)}"></td>
+                        <td class="num"><b th:text="${@fmt.price(p.entry)}"></b></td>
+                        <td class="num" th:text="${@fmt.pct(p.distancePct)}"></td>
+                        <td class="num neg" th:text="${@fmt.price(p.stop)}"></td>
+                        <td class="num pos" th:text="${@fmt.price(p.target1)}"></td>
+                        <td class="why"><span th:each="w : ${p.why}" th:text="${w}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 4. rotation -->
+        <section class="block">
+            <h2 style="margin-bottom:10px"><span class="step-no sm">4</span> Sector rotation</h2>
+            <div class="rotation">
+                <div class="card rot good">
+                    <h3>Money is here now</h3>
+                    <p class="sub">Leading over the last month and still holding this week.</p>
+                    <div th:replace="~{fragments/picks :: picks(${s.leaders}, 'No sector is clearly leading.')}"></div>
+                </div>
+                <div class="card rot warn">
+                    <h3>Rotating in next</h3>
+                    <p class="sub">Money arriving before the price, or a sharp turn up this week. Early: watch their leaders.</p>
+                    <div th:replace="~{fragments/picks :: picks(${s.rotation}, 'No clear rotation signal right now.')}"></div>
+                </div>
+                <div class="card rot bad">
+                    <h3>Losing steam</h3>
+                    <p class="sub">Led the month but weakening this week: tighten stops, don't add.</p>
+                    <div th:replace="~{fragments/picks :: picks(${s.fading}, 'None.')}"></div>
+                </div>
+            </div>
+            <p class="muted small" style="margin-top:8px">Month = last 1 month, week = last 1 week (equal-weight sector indices).
+                Full detail on <a th:href="@{/sectors}">Sectors</a>.</p>
+        </section>
+
+        <!-- 5. avoid -->
+        <section class="card block">
+            <h2><span class="step-no sm">5</span> Avoid or take profits</h2>
+            <p class="sub">Warning patterns among ordinary shares today.</p>
+            <table>
+                <tbody>
+                <tr th:if="${s.avoid.isEmpty()}"><td class="muted">No warnings today.</td></tr>
+                <tr th:each="w : ${s.avoid}">
+                    <td class="sym" style="width:140px"><a th:href="@{/stock/{x}(x=${w.f.symbol})}" th:text="${w.f.symbol}"></a><small th:text="${w.f.sector}"></small></td>
+                    <td class="num" style="width:90px" th:classappend="${@fmt.tone(w.f.changePct)}" th:text="${@fmt.pct(w.f.changePct)}"></td>
+                    <td style="white-space:normal" th:text="${w.reason}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <p class="muted small">How to act: size each position so a hit stop loses 1–2% of your capital (shares = capital × 1% ÷ (entry − stop)),
+            check the chart and floorsheet first, and remember T+2 settlement means you can't sell for about 3 sessions.</p>
+    </th:block>
+
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -72,7 +72,10 @@ public final class FeatureCalculator {
         }
 
         // ---- trend
+        Double ema20 = Indicators.ema(c, 20, L + 1);
         Double ema50 = Indicators.ema(c, 50, L + 1);
+        double low10v = min(l, L - 9, L + 1);
+        Double low10 = Double.isInfinite(low10v) ? null : low10v;
         Double ema50Before = Indicators.ema(c, 50, L - 4);
         Boolean rising = ema50 != null && ema50Before != null ? ema50 > ema50Before : null;
         Double sma200 = Indicators.sma(c, 200, L + 1);
@@ -124,11 +127,11 @@ public final class FeatureCalculator {
                 && close >= baseHigh * (1 - Rules.BASE_FORMING_GAP);
 
         return new StockFeatures(s.symbol(), s.name(), s.sector(), s.dates()[L], s.size(),
-                nn(close), nn(change), nn(v[L]), nn(s.turnover()[L]), nn(s.trades()[L]),
+                nn(close), nn(h[L]), low10, nn(change), nn(v[L]), nn(s.turnover()[L]), nn(s.trades()[L]),
                 rvol, cir, upperWick, lowerWick,
                 atsToday, atsNormal, atsTrend, tradesRatio, tsc,
                 baseSessions, baseHigh, baseLow, baseRange, runUp, drawdown, circuitDays.size(),
-                ema50, rising, sma200, rsi,
+                ema20, ema50, rising, sma200, rsi,
                 lists.turnoverRank(), lists.volumeRank(), lists.turnoverAppearances10(),
                 List.copyOf(hits), forming);
     }

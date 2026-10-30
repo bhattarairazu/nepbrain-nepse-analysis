@@ -11,6 +11,8 @@ public record StockFeatures(
         LocalDate date,
         int sessions,                 // stored sessions for this stock up to the date
         Double close,
+        Double high,
+        Double low10,                 // lowest low of the last 10 sessions (stop reference)
         Double changePct,
         Double volume,
         Double turnover,
@@ -35,6 +37,7 @@ public record StockFeatures(
         Double drawdown60,            // close / 60-session high - 1
         int upperCircuitDays5,
         // trend
+        Double ema20,
         Double ema50,
         Boolean ema50Rising,
         Double sma200,

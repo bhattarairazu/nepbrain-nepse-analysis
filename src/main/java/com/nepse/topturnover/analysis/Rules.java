@@ -54,4 +54,5 @@ public final class Rules {
     public static final double DEFAULT_STOP = 0.08;     // suggested stop: 8% below the close at most
     public static final int STRONG_SCORE = 60;
     public static final int WATCH_SCORE = 40;
+    public static final double HEAVY_RVOL_FOR_SELLING = 1.5; // "avoid": down 1%+ on this much volume
 }

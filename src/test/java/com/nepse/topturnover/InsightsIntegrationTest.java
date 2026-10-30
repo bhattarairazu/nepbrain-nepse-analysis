@@ -53,6 +53,7 @@ class InsightsIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired com.nepse.topturnover.analysis.SectorAnalysisService sectorAnalysis;
+    @Autowired com.nepse.topturnover.analysis.SignalService signalService;
 
     @BeforeAll
     void seed() {
@@ -147,6 +148,30 @@ class InsightsIntegrationTest {
         mvc.perform(get("/sector").param("name", "No Such Sector")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("No data for this sector")));
         mvc.perform(get("/sectors/manage").param("show", "all")).andExpect(status().isOk());
+    }
+
+    @Test
+    void signalsGiveAPlanForTheBreakoutAndFindTheLeadingSector() {
+        var s = signalService.signals().orElseThrow();
+        var brk = s.buyNow().stream().filter(p -> p.f().symbol().equals("BRK")).findFirst().orElseThrow();
+        assertTrue(brk.stop() < brk.entry() && brk.target1() > brk.entry() && brk.target2() > brk.target1());
+        assertEquals(brk.entry() - brk.stop(), (brk.target1() - brk.entry()) / 2, 1e-6);
+        assertTrue(s.buyNow().stream().noneMatch(p -> List.of("OPR", "CLX").contains(p.f().symbol())));
+        assertTrue(s.leaders().stream().anyMatch(p -> p.sector().equals("Hydropower")), s.leaders().toString());
+        assertTrue(s.avoid().stream().anyMatch(w -> w.f().symbol().equals("CLX")));
+        for (var p : s.nextEntries()) assertTrue(p.stop() < p.entry(), p.toString());
+    }
+
+    @Test
+    void signalsPageAndChartFeedWork() throws Exception {
+        mvc.perform(get("/signals")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("Buy setups now")))
+                .andExpect(content().string(containsString("BRK")))
+                .andExpect(content().string(containsString("stock-popover.js")));
+        mvc.perform(get("/api/chart/brk").param("days", "30")).andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.symbol").value("BRK"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.dates.length()").value(30))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.ema20[29]").isNumber());
     }
 
     private static List<String> symbols(List<InsightService.PatternGroup> groups, Pattern p) {
