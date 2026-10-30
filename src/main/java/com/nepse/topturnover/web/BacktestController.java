@@ -49,6 +49,7 @@ public class BacktestController {
         backtest.run(horizon, filter).ifPresent(r -> model.addAttribute("r", r));
         standard.run().ifPresent(sr -> model.addAttribute("std", sr));
         advanced.run().ifPresent(ar -> model.addAttribute("adv", ar));
+        model.addAttribute("watch", advanced.watchlist());
         model.addAttribute("savedRuns", store.recentRuns(15));
 
         List<CaseStudy> cases = new ArrayList<>();

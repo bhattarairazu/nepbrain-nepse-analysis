@@ -171,6 +171,145 @@ public class AdvancedStrategyService {
         return Optional.of(cached);
     }
 
+    // ------------------------------------------------------------------ watchlist: what to look at next
+
+    /** A stock that triggered a rule at the last close, or is one step away from triggering it. */
+    public record WatchItem(Setup setup, String verdict, String tone, Integer oosTrades, Double oosWin, Double oosAvg,
+                            String symbol, String name, String sector, boolean triggered, String condition,
+                            double close, double trigger, double distancePct, Double stop, Double target, double turnover) {}
+
+    /** Watch items for the latest session, rules that passed first, nearest triggers first. */
+    public synchronized List<WatchItem> watchlist() {
+        Optional<Result> res = run();
+        Market m = backtest.data();
+        if (res.isEmpty() || m == null) return List.of();
+        Map<Setup, SetupResult> bySetup = new HashMap<>();
+        res.get().setups().forEach(r -> bySetup.put(r.setup(), r));
+        int T = m.dates.length - 1;
+        boolean marketUp = BacktestService.marketUp(m, T);
+        int[][] ranks = sectorRanks(m);
+        Map<String, Integer> sectorIdx = sectorIndex(m);
+
+        List<WatchItem> out = new ArrayList<>();
+        for (Series s : m.series.values()) {
+            if (!Sectors.isEquity(s.sector) || s.size() < 60) continue;
+            int i = s.size() - 1;
+            if (s.globalIndex[i] != T || !(s.turnover[i] >= BacktestService.MIN_TURNOVER)) continue;
+            Ind x = new Ind(s.close, s.high, s.low);
+            Structure st = new Structure(s);
+            Integer sec = s.sector == null ? null : sectorIdx.get(s.sector);
+            boolean strongSector = sec != null && ranks[T][sec] > 0 && ranks[T][sec] <= 3;
+            double c = s.close[i];
+            for (Setup setup : Setup.values()) {
+                if (setup == Setup.RANDOM) continue;
+                SetupResult r = bySetup.get(setup);
+                Plan p = plan(setup, x, st, s, i, marketUp, strongSector);
+                if (p != null) {
+                    double stop = p.stopPrice() != null ? p.stopPrice() : c * (1 - p.stopPct());
+                    Double target = p.rTarget() != null ? c + p.rTarget() * (c - stop) : null;
+                    out.add(item(setup, r, s, true, "Triggered at the last close: buy at the next open (skip if it opens below the stop)",
+                            c, c, stop, target));
+                    continue;
+                }
+                WatchItem w = settingUp(setup, r, x, st, s, i, marketUp, strongSector);
+                if (w != null && Math.abs(w.distancePct()) <= 5) out.add(w);
+            }
+        }
+        out.sort(Comparator.comparing((WatchItem w) -> !w.triggered())
+                .thenComparing(w -> !"Passed".equals(w.verdict()))
+                .thenComparing(w -> w.setup().ordinal())
+                .thenComparingDouble(w -> Math.abs(w.distancePct())));
+        return out;
+    }
+
+    private static WatchItem item(Setup setup, SetupResult r, Series s, boolean triggered, String condition,
+                                  double close, double trigger, Double stop, Double target) {
+        int i = s.size() - 1;
+        return new WatchItem(setup, r == null ? "" : r.verdict(), r == null ? "neutral" : r.tone(),
+                r == null ? null : r.outOfSample().trades(), r == null ? null : r.outOfSample().winRate(),
+                r == null ? null : r.outOfSample().avgNet(), s.symbol, s.name, s.sector, triggered, condition,
+                close, trigger, (trigger / close - 1) * 100, stop, target, s.turnover[i]);
+    }
+
+    /** One step away from the rule: the condition and price that would trigger it at the next close. */
+    private static WatchItem settingUp(Setup setup, SetupResult r, Ind x, Structure st, Series s, int i,
+                                       boolean marketUp, boolean strongSector) {
+        double c = s.close[i];
+        String f = "%.2f";
+        switch (setup) {
+            case BB_UPTREND, BB_DRYUP, BB_SECTOR, BB_MARKET -> {
+                if (Double.isNaN(x.lower[i]) || !(c < x.lower[i])) return null;
+                String extra;
+                if (setup == Setup.BB_UPTREND) {
+                    if (!(ok(x.sma50[i], x.sma50[i - 5]) && x.sma50[i] > x.sma50[i - 5])) return null;
+                    extra = " while staying above the 50-day average (" + String.format(f, x.sma50[i]) + ")";
+                } else if (setup == Setup.BB_DRYUP) {
+                    Double avgVol = Indicators.mean(s.volume, i - 19, i + 1, 10);
+                    extra = avgVol == null ? "" : " on volume below " + String.format("%,.0f", avgVol) + " shares";
+                } else if (setup == Setup.BB_SECTOR) {
+                    if (!strongSector) return null;
+                    extra = " (its sector is top-3 now)";
+                } else {
+                    if (!marketUp) return null;
+                    extra = " while the market stays above its 20-session average";
+                }
+                double trig = x.lower[i];
+                return item(setup, r, s, false, "Closed below the lower Bollinger band. Buy if the next session closes back above about "
+                        + String.format(f, trig) + extra + ".", c, trig, trig * 0.92, null);
+            }
+            case RSI2_BB -> {
+                if (!ok(x.rsi2[i], x.lower[i]) || x.rsi2[i] > 25 || c > x.lower[i] * 1.02) return null;
+                return item(setup, r, s, false, String.format("RSI(2) %.0f, close near the lower band. Triggers on a close below about %.2f with RSI(2) under 10.",
+                        x.rsi2[i], x.lower[i]), c, x.lower[i], x.lower[i] * 0.92, null);
+            }
+            case SMC_SWEEP, SWEEP_MARKET -> {
+                if (setup == Setup.SWEEP_MARKET && !marketUp) return null;
+                double low20 = Indicators.min(s.low, i - 19, i + 1);
+                if (Double.isInfinite(low20) || c > low20 * 1.04) return null;
+                return item(setup, r, s, false, String.format("Within 4%% of its 20-session low (%.2f). Buy if a session dips below it and closes back above it, in the upper half of its range, on 1.2× normal volume.", low20),
+                        c, low20, low20 * 0.98, null);
+            }
+            case SMC_BOS_OB -> {
+                for (int b = i; b >= Math.max(1, i - 9); b--) {
+                    Integer sh = st.lastSwingHigh(b - 1);
+                    if (sh == null || !(s.close[b] > s.high[sh] && s.close[b - 1] <= s.high[sh])) continue;
+                    int ob = -1;
+                    for (int k = b - 1; k >= Math.max(0, b - 10); k--) if (s.close[k] < s.open[k]) { ob = k; break; }
+                    if (ob < 0) return null;
+                    double hi = s.high[ob], lo = s.low[ob];
+                    for (int k = b + 1; k <= i; k++) if (s.low[k] <= hi) return null;
+                    double stop = lo * 0.99;
+                    return item(setup, r, s, false, String.format("Broke structure on %s. Order block %.2f–%.2f not retested yet: buy if price dips into it and closes above %.2f.",
+                            s.dates[b], lo, hi, lo), c, hi, stop, hi + 2 * (hi - stop));
+                }
+                return null;
+            }
+            case SMC_FVG -> {
+                for (int k = i; k >= Math.max(2, i - 9); k--) {
+                    double bottom = s.high[k - 2], top = s.low[k];
+                    if (!(top > bottom * 1.01) || s.close[k - 1] / s.close[k - 2] - 1 < 0.03) continue;
+                    for (int j = k + 1; j <= i; j++) if (s.low[j] <= top) return null;
+                    double stop = bottom * 0.99;
+                    return item(setup, r, s, false, String.format("Unfilled fair value gap %.2f–%.2f (from %s). Buy if price dips into it and closes above %.2f.",
+                            bottom, top, s.dates[k - 1], bottom), c, top, stop, top + 2 * (top - stop));
+                }
+                return null;
+            }
+            case SMC_CHOCH -> {
+                boolean down = (!Double.isNaN(x.ema50[i]) && c < x.ema50[i]) || c / s.close[i - 19] - 1 <= -0.08;
+                Integer sh = st.lastSwingHigh(i), sl = st.lastSwingLow(i);
+                if (!down || sh == null || sl == null || i - sh > 30 || c > s.high[sh]) return null;
+                double level = s.high[sh], stop = s.low[sl] * 0.99;
+                if (!(stop < level)) return null;
+                return item(setup, r, s, false, String.format("In a downtrend. A close above the last swing high %.2f would be a change of character.", level),
+                        c, level, stop, level + 2 * (level - stop));
+            }
+            default -> {
+                return null;
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ setups
 
     private static Plan plan(Setup setup, Ind x, Structure st, Series s, int i, boolean marketUp, boolean strongSector) {

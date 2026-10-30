@@ -294,3 +294,8 @@ td.why span::before { content: "• "; }
 .sp-modal-box .sp-na iframe { flex: 1; }
 .sp-close { position: absolute; top: -12px; right: -12px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); cursor: pointer; font-size: 14px; }
+
+/* ---------- portfolio simulation ---------- */
+.rule-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 4px 16px; margin-top: 6px;
+  max-height: 260px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; }
+.rule-picks label { display: flex; gap: 6px; align-items: baseline; font-size: 13px; cursor: pointer; }

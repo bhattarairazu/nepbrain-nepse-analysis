@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Portfolio simulation')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <a class="muted small" th:href="@{/backtest}">← Backtest</a>
+            <h1>Portfolio simulation</h1>
+            <p>What an account would actually have earned following the chosen rules: limited capital, a fixed share per trade,
+                a maximum number of open positions, one position per stock, costs (in each trade) and capital gains tax.
+                Signals that arrive when the money is already invested are skipped.</p>
+        </div>
+    </div>
+
+    <form class="card filter" method="get" th:action="@{/backtest/portfolio}" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;gap:12px 16px;flex-wrap:wrap;align-items:flex-end">
+            <label><span>Starting capital (Rs)</span><input type="number" name="capital" step="100000" min="10000" th:value="${#numbers.formatDecimal(s.capital, 1, 0)}" style="width:150px"></label>
+            <label><span>Per trade (% of account)</span><input type="number" name="positionPct" step="1" min="1" max="100" th:value="${#numbers.formatDecimal(s.positionPct, 1, 0)}" style="width:90px"></label>
+            <label><span>Max open positions</span><input type="number" name="maxPositions" min="1" max="50" th:value="${s.maxPositions}" style="width:80px"></label>
+            <label><span>Period</span>
+                <select name="period">
+                    <option th:each="p : ${periods}" th:value="${p}" th:selected="${p == s.period}"
+                            th:text="${p.name() == 'ALL'} ? 'Whole stored history' : (${p.name() == 'DESIGN'} ? 'Design period (first 60%)' : (${p.name() == 'OUT_OF_SAMPLE'} ? 'Out-of-sample (last 40%)' : 'Custom dates'))"></option>
+                </select></label>
+            <label><span>From (custom)</span><input type="date" name="from" th:value="${s.from}"></label>
+            <label><span>To (custom)</span><input type="date" name="to" th:value="${s.to}"></label>
+            <label><span>Same-day priority</span>
+                <select name="priority">
+                    <option th:each="p : ${priorities}" th:value="${p}" th:selected="${p == s.priority}"
+                            th:text="${p.name() == 'RANDOM'} ? 'Random (fair)' : (${p.name() == 'ALPHABETICAL'} ? 'Alphabetical' : 'Rule order (first ticked first)')"></option>
+                </select></label>
+            <label><span>7.5% capital gains tax</span>
+                <select name="tax"><option value="true" th:selected="${s.tax}">Yes</option><option value="false" th:selected="${!s.tax}">No</option></select></label>
+            <button class="btn primary" type="submit">Simulate</button>
+        </div>
+        <div style="margin-top:12px">
+            <span class="muted small">Rules (from the latest stored backtest runs; run the Backtest page first to create them):</span>
+            <div class="rule-picks">
+                <label th:each="o : ${options}" th:title="${o.verdict}">
+                    <input type="checkbox" name="rules" th:value="${o.key}" th:checked="${s.strategies.contains(o.key)}">
+                    <span th:text="${o.title}"></span>
+                    <small class="muted" th:text="'· ' + ${o.kind} + ' · ' + ${o.trades} + ' trades' + (${o.avgNet != null} ? ', ' + ${@fmt.pct(o.avgNet)} + '/trade' : '')"></small>
+                    <span class="pill" th:if="${o.verdict == 'Passed' or o.verdict == 'Profitable and consistent' or o.verdict == 'Confident'}" th:classappend="good" th:text="${o.verdict}"></span>
+                </label>
+                <p th:if="${options.isEmpty()}" class="muted">No stored backtest runs yet. Open the Backtest page once to create them.</p>
+            </div>
+        </div>
+    </form>
+
+    <div th:if="${r == null and !options.isEmpty()}" class="card empty">No trades for these rules in this period.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="tiles">
+            <div class="card tile">
+                <div class="k">Final value</div>
+                <div class="v" th:classappend="${@fmt.tone(r.returnPct)}" th:text="'Rs ' + ${@fmt.count(r.finalValue)}"></div>
+                <div class="s" th:text="'from Rs ' + ${@fmt.count(s.capital)} + ' · ' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}"></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Return</div>
+                <div class="v" th:classappend="${@fmt.tone(r.returnPct)}" th:text="${@fmt.pct(r.returnPct)}"></div>
+                <div class="s">Market (equal-weight, buy and hold): <span th:classappend="${@fmt.tone(r.marketPct)}" th:text="${@fmt.pct(r.marketPct)}"></span></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Trades</div>
+                <div class="v" th:text="${r.taken}"></div>
+                <div class="s" th:text="${r.winners} + ' winners · ' + ${r.skipped} + ' of ' + ${r.signals} + ' signals skipped (money already invested)'"></div>
+            </div>
+            <div class="card tile">
+                <div class="k">Worst dip · tax paid</div>
+                <div class="v neg" th:text="${@fmt.pct(r.maxDrawdownPct)}"></div>
+                <div class="s" th:text="'Capital gains tax Rs ' + ${@fmt.count(r.taxPaid)}"></div>
+            </div>
+        </div>
+
+        <div class="note">
+            <b>Taken vs skipped:</b> all <span th:text="${r.signals}"></span> signals averaged <b th:text="${@fmt.pct(r.avgAll)}"></b> per trade,
+            the ones this account could take averaged <b th:text="${@fmt.pct(r.avgTaken)}"></b>, the ones it had to skip
+            <b th:text="${@fmt.pct(r.avgSkipped)}"></b>.
+            A big gap means the rule's results depend on taking signals that bunch up on the same days, which a limited account can't do.
+        </div>
+
+        <section class="card block">
+            <h2>Account value vs the market</h2>
+            <p class="sub">Open positions are counted at cost until they are sold; the market line is the equal-weight index scaled to the same starting capital.</p>
+            <div class="chart-box"><canvas id="equityChart"></canvas></div>
+        </section>
+
+        <section class="card block">
+            <h2>Trades taken</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Stock</th><th>Rule</th><th>Bought</th><th>Sold</th><th class="num">Amount</th><th class="num">Net %</th>
+                        <th class="num">Profit</th><th class="num">Tax</th></tr></thead>
+                    <tbody>
+                    <tr th:each="t : ${r.trades}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a></td>
+                        <td class="small" th:text="${t.strategy}"></td>
+                        <td th:text="${t.entry}"></td>
+                        <td th:text="${t.exit}"></td>
+                        <td class="num" th:text="${@fmt.count(t.amount)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(t.profit)}" th:text="${@fmt.count(t.profit)}"></td>
+                        <td class="num muted" th:text="${t.tax > 0} ? ${@fmt.count(t.tax)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const chart = /*[[${chart}]]*/ {};
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                const c = n => css.getPropertyValue(n).trim();
+                Chart.defaults.color = c('--muted');
+                Chart.defaults.borderColor = c('--border');
+                new Chart(document.getElementById('equityChart'), {
+                    type: 'line',
+                    data: { labels: chart.dates, datasets: [
+                        { label: 'Account', data: chart.equity, borderColor: c('--accent'), borderWidth: 2.5, pointRadius: 0, tension: 0.1 },
+                        { label: 'Market (same start)', data: chart.market, borderColor: c('--muted'), borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0 }
+                    ] },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { y: { ticks: { callback: v => 'Rs ' + (v / 1e5).toFixed(1) + ' L' } } } }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
