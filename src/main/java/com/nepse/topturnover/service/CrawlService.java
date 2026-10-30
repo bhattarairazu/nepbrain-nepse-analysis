@@ -36,12 +36,14 @@ public class CrawlService {
     private final MarketDataRepository repo;
     private final CrawlWindow window;
     private final FeatureService features;
+    private final HistoryService history;
     private final ReentrantLock lock = new ReentrantLock();
 
-    public CrawlService(NepseProperties props, SharesansarCrawler crawler, MarketDataRepository repo, FeatureService features)
-            throws IOException {
+    public CrawlService(NepseProperties props, SharesansarCrawler crawler, MarketDataRepository repo, FeatureService features,
+                        HistoryService history) throws IOException {
         this.props = props;
         this.features = features;
+        this.history = history;
         this.crawler = crawler;
         this.repo = repo;
         this.window = new CrawlWindow(props.market().days(), CrawlWindow.loadHolidays(props.market().holidays()),
@@ -109,6 +111,7 @@ public class CrawlService {
         int guessed = repo.autoAssignSectors();
         if (guessed > 0) LOG.info("Guessed sectors for {} new stock(s) from company names", guessed);
         features.evict();
+        history.loadSectorsIfStale(); // official sectors, at most once per nepse.history.sector-refresh-days
         String msg = String.format("Stored %s: %d stocks, top %d by turnover and by volume",
                 s.tradeDate(), s.quotes().size(), props.analysis().topN());
         LOG.info(msg);

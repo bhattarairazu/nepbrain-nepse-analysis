@@ -40,6 +40,23 @@
         </section>
     </div>
 
+    <div class="grid-2" style="margin-top:16px">
+        <section class="card">
+            <h2>Backfill past sessions</h2>
+            <p class="sub">Fetches earlier trading days through the date filter on ShareSansar's price page, one request every
+                <span th:text="${historyCfg.delaySeconds}"></span> seconds. Days already stored are kept; weekends, listed holidays and
+                days without a session are skipped. Top turnover and volume are ranked from each day's full table.</p>
+            <form method="post" th:action="@{/crawl/backfill}" class="inline">
+                <label class="muted" for="sessions">Make sure the last</label>
+                <input type="number" id="sessions" name="sessions" value="20" min="1" th:max="${historyCfg.maxSessions}" style="width:80px">
+                <span class="muted">trading sessions are stored</span>
+                <button class="btn primary" type="submit" th:disabled="${job.running}">Backfill</button>
+            </form>
+            <p class="muted small" style="margin:10px 0 0" th:text="'Stored now: ' + (${earliest != null} ? ${@fmt.day(earliest)} + ' → ' + ${@fmt.day(latest)} : 'nothing yet')"></p>
+        </section>
+        <section th:replace="~{fragments/job :: status(${job})}"></section>
+    </div>
+
     <section class="card" style="margin-top:16px">
         <h2>Recent crawl attempts</h2>
         <p class="sub">Routine "outside the window" checks aren't logged; fetches, skips after fetching and failures are.</p>

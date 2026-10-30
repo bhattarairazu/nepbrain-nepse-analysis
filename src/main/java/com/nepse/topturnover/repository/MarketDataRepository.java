@@ -171,6 +171,32 @@ public class MarketDataRepository {
         return updates.size();
     }
 
+    /** Applies sectors read from ShareSansar; never overrides MANUAL. Returns {matched stocks, sectors changed}. */
+    public int[] applySourceSectors(Map<String, String> sectors) {
+        Map<String, String[]> current = new HashMap<>();
+        jdbc.query("SELECT symbol, sector, sector_source FROM stock", rs -> {
+            current.put(rs.getString(1), new String[] {rs.getString(2), rs.getString(3)});
+        });
+        List<Object[]> updates = new ArrayList<>();
+        int changed = 0;
+        for (var e : sectors.entrySet()) {
+            String[] cur = current.get(e.getKey());
+            if (cur == null || "MANUAL".equals(cur[1])) continue;
+            if (!e.getValue().equals(cur[0])) changed++;
+            updates.add(new Object[] {e.getValue(), e.getKey()});
+        }
+        if (!updates.isEmpty()) {
+            jdbc.batchUpdate("UPDATE stock SET sector = ?, sector_source = 'SHARESANSAR' WHERE symbol = ? AND (sector_source IS NULL OR sector_source <> 'MANUAL')", updates);
+        }
+        return new int[] {updates.size(), changed};
+    }
+
+    /** When sectors were last loaded from ShareSansar successfully, if ever. */
+    public Optional<LocalDateTime> lastSectorLoad() {
+        return Optional.ofNullable(jdbc.queryForObject(
+                "SELECT MAX(run_at) FROM crawl_log WHERE source = 'sharesansar-sectors' AND status = 'STORED'", LocalDateTime.class));
+    }
+
     /** Sets sectors from symbol -> sector pairs (CSV import); counts as manual. */
     public int importSectors(Map<String, String> sectors) {
         int n = 0;

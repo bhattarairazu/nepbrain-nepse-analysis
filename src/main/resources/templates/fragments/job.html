@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- Progress of the background history job (backfill or sector load). Reloads the page every 5 s while running. -->
+<section th:fragment="status(job)" class="card job" th:if="${job != null and job.job != null}" th:classappend="${job.running} ? 'running'">
+    <h2>
+        <span th:text="${job.job}"></span>
+        <span class="pill" th:classappend="${job.running} ? 'warn' : 'good'" th:text="${job.running} ? 'Running' : 'Finished'"></span>
+    </h2>
+    <p class="sub" style="margin:4px 0 8px">
+        <span th:text="${job.message}"></span>
+        <span th:if="${job.target > 0 and job.job.startsWith('Backfill')}"
+              th:text="' · stored ' + ${job.stored} + ', already had ' + ${job.alreadyStored} + ', no session ' + ${job.skipped}"></span>
+    </p>
+    <ul class="joblog" th:if="${!job.log.isEmpty()}">
+        <li th:each="l : ${job.log}" th:text="${l}"></li>
+    </ul>
+    <script th:if="${job.running}">setTimeout(() => location.reload(), 5000);</script>
+</section>
+</body>
+</html>

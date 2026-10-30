@@ -15,6 +15,18 @@
 
     <div th:if="${message != null}" class="flash SKIPPED" th:text="${message}"></div>
 
+    <section class="card" style="margin-bottom:16px">
+        <h2>Official sectors from ShareSansar</h2>
+        <p class="sub">Reads each sector's stock list through the sector filter on ShareSansar's price page (about 17 requests,
+            spaced out) and sets every stock's sector. Name guesses (AUTO) are replaced; your MANUAL choices are kept.
+            This also runs automatically once a week after the daily crawl.</p>
+        <form method="post" th:action="@{/sectors/load}" class="inline">
+            <button class="btn primary" type="submit" th:disabled="${job.running}">Load sectors from ShareSansar</button>
+            <span class="muted small" th:text="${lastLoad != null} ? 'Last loaded ' + ${#temporals.format(lastLoad, 'yyyy-MM-dd HH:mm')} : 'Never loaded yet'"></span>
+        </form>
+    </section>
+    <section th:replace="~{fragments/job :: status(${job})}"></section>
+
     <div class="note" th:if="${flow.assignedStocks < flow.totalStocks}">
         <b th:text="${flow.totalStocks - flow.assignedStocks}"></b> of <span th:text="${flow.totalStocks}"></span> stocks have no sector yet.
     </div>
@@ -23,7 +35,7 @@
         <div class="page-head" style="margin-bottom:8px">
             <div>
                 <h2>Stock sectors</h2>
-                <p class="sub" style="margin:4px 0 0">AUTO = guessed from the company name, so check it. Your changes are marked MANUAL and are never overwritten.</p>
+                <p class="sub" style="margin:4px 0 0">SHARESANSAR = from the site's sector filter · AUTO = guessed from the company name · MANUAL = set by you (never overwritten).</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <span class="seg">
@@ -59,7 +71,7 @@
                             </select>
                         </form>
                     </td>
-                    <td><span class="pill" th:if="${s.sectorSource != null}" th:classappend="${s.sectorSource == 'AUTO'} ? 'warn' : 'good'" th:text="${s.sectorSource}"></span></td>
+                    <td><span class="pill" th:if="${s.sectorSource != null}" th:classappend="${s.sectorSource == 'AUTO'} ? 'warn' : (${s.sectorSource == 'MANUAL'} ? 'good' : '')" th:text="${s.sectorSource}"></span></td>
                 </tr>
                 </tbody>
             </table>

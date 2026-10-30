@@ -18,7 +18,11 @@ import com.nepse.topturnover.model.StockQuote;
 class SharesansarCrawlerTest {
 
     private static Document fixture() throws Exception {
-        try (InputStream in = SharesansarCrawlerTest.class.getResourceAsStream("/fixtures/sharesansar-2026-10-30.html")) {
+        return fixture("sharesansar-2026-10-30.html");
+    }
+
+    private static Document fixture(String name) throws Exception {
+        try (InputStream in = SharesansarCrawlerTest.class.getResourceAsStream("/fixtures/" + name)) {
             return Jsoup.parse(in, "UTF-8", "https://www.sharesansar.com/");
         }
     }
@@ -39,6 +43,22 @@ class SharesansarCrawlerTest {
         assertEquals(127696988.5, adbl.turnover());
         assertEquals(605, adbl.trades());
         assertEquals(-0.54, adbl.changePct());
+    }
+
+    @Test
+    void parsesAPastDateFromTheDateFilter() throws Exception {
+        MarketSnapshot s = SharesansarCrawler.parse(fixture("sharesansar-history-2026-10-29.html"));
+        assertEquals(LocalDate.of(2026, 10, 29), s.tradeDate());
+        assertTrue(s.quotes().size() > 300, "rows: " + s.quotes().size());
+        assertTrue(s.quotes().stream().allMatch(q -> q.turnover() != null && q.volume() != null));
+    }
+
+    @Test
+    void parsesOneSectorFromTheSectorFilter() throws Exception {
+        MarketSnapshot s = SharesansarCrawler.parse(fixture("sharesansar-sector-hydropower-2026-10-30.html"));
+        assertEquals(112, s.quotes().size());
+        assertTrue(s.quotes().stream().anyMatch(q -> q.symbol().equals("AHPC")));
+        assertTrue(s.quotes().stream().noneMatch(q -> q.symbol().equals("ADBL")), "a bank must not be in the hydropower list");
     }
 
     @Test

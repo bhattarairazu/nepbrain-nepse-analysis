@@ -23,6 +23,7 @@ import com.nepse.topturnover.analysis.Signal;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.repository.MarketDataRepository;
 import com.nepse.topturnover.service.CrawlService;
+import com.nepse.topturnover.service.HistoryService;
 
 @Controller
 public class DashboardController {
@@ -32,9 +33,11 @@ public class DashboardController {
     private final NepseProperties props;
     private final InsightService insights;
     private final FeatureService features;
+    private final HistoryService history;
 
     public DashboardController(AnalysisService analysis, MarketDataRepository repo, CrawlService crawlService, NepseProperties props,
-                               InsightService insights, FeatureService features) {
+                               InsightService insights, FeatureService features, HistoryService history) {
+        this.history = history;
         this.analysis = analysis;
         this.insights = insights;
         this.features = features;
@@ -124,7 +127,18 @@ public class DashboardController {
         model.addAttribute("crawl", props.crawl());
         model.addAttribute("market", props.market());
         model.addAttribute("latest", repo.latestDay().orElse(null));
+        model.addAttribute("earliest", repo.earliestDay().orElse(null));
+        model.addAttribute("job", history.status());
+        model.addAttribute("historyCfg", props.history());
         return "crawl";
+    }
+
+    @PostMapping("/crawl/backfill")
+    public String backfill(@RequestParam(defaultValue = "20") int sessions, RedirectAttributes flash) {
+        boolean started = history.startBackfill(sessions);
+        flash.addFlashAttribute("result", new CrawlService.Result(started ? CrawlService.Status.STORED : CrawlService.Status.SKIPPED,
+                started ? "Backfill started in the background; progress is shown below." : "Another history job is already running."));
+        return "redirect:/crawl";
     }
 
     @PostMapping("/crawl/run")

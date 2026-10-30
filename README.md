@@ -66,9 +66,20 @@ Scores rank stocks **to research**; they are not buy signals. All thresholds liv
 
 Until then the pages say what is missing.
 
+### Backfill and official sectors
+Both use the date and sector filter on ShareSansar's own "Today's Share Price" page (the same request its Search button
+makes), one request every `nepse.history.delay-seconds` (4 s):
+- **Data → Backfill past sessions**: makes sure the last N trading sessions (default 20, max 60) are stored. Already-stored
+  days are kept; weekends, listed holidays and days the site has no session for (e.g. Dashain) are skipped.
+  About 20–25 requests for 20 sessions.
+- **Sectors → Manage sectors → Load sectors from ShareSansar**: one request per sector (~17) sets every traded stock's
+  official sector (source SHARESANSAR). Runs automatically once a week after the daily crawl. MANUAL choices are never
+  overwritten; stocks that didn't trade on the loaded day keep their name guess until they trade.
+
+Top turnover and top volume are always ranked by the app from each day's full table, never copied from a list.
+
 ### Sectors and the index
-- ShareSansar's price table has no sector column, so after each crawl the app **guesses sectors from company names**
-  (about 94% of stocks on a real page). Guesses are marked AUTO. Fix the rest on the Sectors page or import a
+- New stocks get a sector **guessed from the company name** (marked AUTO) until the official load (SHARESANSAR) replaces it. Fix the rest on the Sectors page or import a
   `SYMBOL,Sector` CSV. Your choices are marked MANUAL and are never overwritten.
 - nepalstock.com is not used: its data API is token-protected and blocks automated browsers, and getting around that would
   defeat protections NEPSE put there deliberately.

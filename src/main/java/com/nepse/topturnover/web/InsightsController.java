@@ -27,6 +27,7 @@ import com.nepse.topturnover.analysis.Sectors;
 import com.nepse.topturnover.analysis.StockFeatures;
 import com.nepse.topturnover.analysis.TradeSizeClass;
 import com.nepse.topturnover.repository.MarketDataRepository;
+import com.nepse.topturnover.service.HistoryService;
 
 /** Ideas, Patterns, Sectors and Trade size pages. */
 @Controller
@@ -35,8 +36,11 @@ public class InsightsController {
     private final AnalysisService analysis;
     private final MarketDataRepository repo;
     private final FeatureService features;
+    private final HistoryService history;
 
-    public InsightsController(InsightService insights, AnalysisService analysis, MarketDataRepository repo, FeatureService features) {
+    public InsightsController(InsightService insights, AnalysisService analysis, MarketDataRepository repo, FeatureService features,
+                              HistoryService history) {
+        this.history = history;
         this.insights = insights;
         this.analysis = analysis;
         this.repo = repo;
@@ -93,6 +97,8 @@ public class InsightsController {
         model.addAttribute("show", show);
         model.addAttribute("stocks", repo.stocks(show));
         model.addAttribute("allSectors", Sectors.ALL);
+        model.addAttribute("job", history.status());
+        model.addAttribute("lastLoad", repo.lastSectorLoad().orElse(null));
         return "sectors-manage";
     }
 
@@ -107,6 +113,14 @@ public class InsightsController {
             flash.addFlashAttribute("message", symbol + " → " + (sector == null || sector.isBlank() ? "no sector" : sector));
         }
         return "redirect:/sectors/manage?show=" + show + "#stocks";
+    }
+
+    @PostMapping("/sectors/load")
+    public String loadSectors(RedirectAttributes flash) {
+        flash.addFlashAttribute("message", history.startSectorLoad()
+                ? "Loading sectors from ShareSansar in the background (about a minute)."
+                : "Another history job is already running.");
+        return "redirect:/sectors/manage?show=all";
     }
 
     @PostMapping("/sectors/auto")

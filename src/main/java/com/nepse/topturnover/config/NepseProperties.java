@@ -13,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** All nepse.* settings from application.properties. Values are parsed here so the config can stay plain text. */
 @ConfigurationProperties(prefix = "nepse")
-public record NepseProperties(Market market, Crawl crawl, Analysis analysis) {
+public record NepseProperties(Market market, Crawl crawl, Analysis analysis, History history) {
 
     public record Market(String timezone, String tradingDays, String closeTime, String holidaysFile) {
         public ZoneId zone() { return ZoneId.of(timezone); }
@@ -41,4 +41,7 @@ public record NepseProperties(Market market, Crawl crawl, Analysis analysis) {
     }
 
     public record Analysis(int topN) {}
+
+    /** Backfilling past sessions and loading sectors through the page's own date/sector filter. */
+    public record History(String ajaxUrl, int delaySeconds, int maxSessions, int sectorRefreshDays) {}
 }
