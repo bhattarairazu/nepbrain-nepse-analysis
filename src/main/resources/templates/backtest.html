@@ -51,7 +51,8 @@
                         <th class="num">Close</th><th class="num">Trigger</th><th class="num">Away</th><th class="num">Stop</th><th class="num">Target</th></tr></thead>
                     <tbody>
                     <tr th:each="w : ${watch}">
-                        <td class="sym"><a th:href="@{/stock/{x}(x=${w.symbol})}" th:text="${w.symbol}"></a><small th:text="${w.sector}"></small></td>
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${w.symbol})}" th:text="${w.symbol}"></a><small th:text="${w.sector}"></small>
+                            <a class="small" th:if="${w.triggered}" th:href="@{/journal/new(symbol=${w.symbol},rule=${w.setup.title},stop=${w.stop != null ? #numbers.formatDecimal(w.stop,1,2,'POINT') : null},target=${w.target != null ? #numbers.formatDecimal(w.target,1,2,'POINT') : null})}">Log ✎</a></td>
                         <td style="white-space:normal;min-width:180px"><span th:text="${w.setup.title}"></span><br>
                             <span class="pill" th:classappend="${w.tone}" th:text="${w.verdict}"></span></td>
                         <td class="small" th:text="${w.oosTrades != null and w.oosTrades > 0} ? ${w.oosTrades} + ' trades, ' + ${@fmt.decimal(w.oosWin, 0)} + '% winners, ' + ${@fmt.pct(w.oosAvg)} + ' per trade' : 'no trades yet'"></td>

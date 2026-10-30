@@ -13,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** All nepse.* settings from application.properties. Values are parsed here so the config can stay plain text. */
 @ConfigurationProperties(prefix = "nepse")
-public record NepseProperties(Market market, Crawl crawl, Analysis analysis, History history) {
+public record NepseProperties(Market market, Crawl crawl, Analysis analysis, History history, Costs costs) {
 
     public record Market(String timezone, String tradingDays, String closeTime, String holidaysFile) {
         public ZoneId zone() { return ZoneId.of(timezone); }
@@ -43,6 +43,13 @@ public record NepseProperties(Market market, Crawl crawl, Analysis analysis, His
     public record Analysis(int topN) {}
 
     /** Backfilling past sessions and loading sectors through the page's own date/sector filter. */
+    /**
+     * NEPSE trading charges used by the trade journal. commissionTiers: "upTo:percent,...,max:percent" per side.
+     * Update these when SEBON revises the rates.
+     */
+    public record Costs(String commissionTiers, double minCommission, double sebonPct, double dpCharge,
+                        double cgtShortPct, double cgtLongPct) {}
+
     /** mondayFridaySince: first date of NEPSE's Monday-Friday week; before it the week was Sunday-Thursday. */
     public record History(String ajaxUrl, int delaySeconds, int maxSessions, int sectorRefreshDays, String mondayFridaySince) {
         public boolean wasTradingWeekday(java.time.LocalDate d) {

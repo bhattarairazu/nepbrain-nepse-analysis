@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Trade journal')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Trade journal</h1>
+            <p>Log every trade when you buy and when you sell: the rule, the market, your plan and how you felt.
+                Charges and capital gains tax are worked out for you. Review monthly; patterns become reliable after about 30 trades.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn primary" th:href="@{/journal/new}">+ Log a buy</a>
+            <a class="btn" th:href="@{/journal/export.csv}">Export CSV</a>
+        </div>
+    </div>
+
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+
+    <!-- open positions -->
+    <section class="card block">
+        <h2>Open positions <span class="muted small" th:text="${open.size()}"></span></h2>
+        <p class="sub">Valued at the latest stored close, after selling charges, before tax. NEPSE has no stop orders:
+            if a close is below your stop, sell at the next open as planned.</p>
+        <p th:if="${open.isEmpty()}" class="muted">No open positions.</p>
+        <div class="table-wrap" th:unless="${open.isEmpty()}">
+            <table>
+                <thead><tr><th>Stock</th><th>Rule</th><th>Bought</th><th class="num">Qty</th><th class="num">Entry</th><th class="num">Last close</th>
+                    <th class="num">Stop</th><th class="num">Target</th><th class="num">Value now</th><th class="num">P&amp;L (before tax)</th>
+                    <th class="num">Days</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="v : ${open}" th:with="t=${v.t}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
+                    <td class="small" style="white-space:normal;max-width:180px" th:text="${t.rule}"></td>
+                    <td th:text="${t.entryDate}"></td>
+                    <td class="num" th:text="${@fmt.count(t.quantity)}"></td>
+                    <td class="num" th:text="${@fmt.price(t.entryPrice)}"></td>
+                    <td class="num" th:text="${@fmt.price(v.lastClose)}" th:title="${v.lastDate}"></td>
+                    <td class="num neg" th:text="${@fmt.price(t.stopPrice)}"></td>
+                    <td class="num pos" th:text="${@fmt.price(t.targetPrice)}"></td>
+                    <td class="num" th:text="${@fmt.count(v.b.sellAmount)}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(v.b.netPnl)}"><b th:text="${@fmt.count(v.b.netPnl)}"></b>
+                        <small th:text="${@fmt.pct(v.b.netPct)}"></small></td>
+                    <td class="num" th:text="${v.b.daysHeld}"></td>
+                    <td>
+                        <span class="pill bad" th:if="${v.stopBroken}">Closed below stop: sell</span>
+                        <span class="pill good" th:if="${v.targetReached}">Target reached</span>
+                        <span class="pill" th:if="${!v.stopBroken and !v.targetReached}">Holding</span>
+                    </td>
+                    <td style="white-space:nowrap">
+                        <a class="btn sm" th:href="@{/journal/{id}/close(id=${t.id})}">Close</a>
+                        <a class="btn sm" th:href="@{/journal/{id}/edit(id=${t.id})}">Edit</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- review -->
+    <section class="card block" th:with="r=${review}">
+        <div class="page-head" style="margin-bottom:8px">
+            <div>
+                <h2>Review</h2>
+                <p class="sub" style="margin:4px 0 0">Closed trades<span th:if="${from != null or to != null}" th:text="' from ' + (${from != null} ? ${from} : 'start') + ' to ' + (${to != null} ? ${to} : 'today')"></span>.</p>
+            </div>
+            <form class="inline" method="get" th:action="@{/journal}">
+                <label class="muted small">From <input type="date" name="from" th:value="${from}"></label>
+                <label class="muted small">To <input type="date" name="to" th:value="${to}"></label>
+                <button class="btn sm" type="submit">Apply</button>
+                <a class="btn sm" th:href="@{/journal}">All time</a>
+            </form>
+        </div>
+
+        <div class="tiles">
+            <div class="card tile"><div class="k">Net profit (after charges and tax)</div>
+                <div class="v" th:classappend="${@fmt.tone(r.netPnl)}" th:text="'Rs ' + ${@fmt.count(r.netPnl)}"></div>
+                <div class="s" th:text="${r.closed} + ' closed · ' + ${r.open} + ' open'"></div></div>
+            <div class="card tile"><div class="k">Win rate</div>
+                <div class="v" th:text="${r.closed > 0} ? ${@fmt.decimal(r.winRate, 0)} + '%' : '—'"></div>
+                <div class="s" th:text="'Avg ' + ${@fmt.pct(r.avgNetPct)} + ' per trade'"></div></div>
+            <div class="card tile"><div class="k">Profit factor · avg R</div>
+                <div class="v" th:text="${r.closed > 0} ? ${@fmt.decimal(r.profitFactor, 2)} : '—'"></div>
+                <div class="s" th:text="'Average R ' + ${@fmt.decimal(r.avgR, 2)} + ' (profit ÷ planned risk)'"></div></div>
+            <div class="card tile"><div class="k">Charges · tax paid</div>
+                <div class="v" th:text="'Rs ' + ${@fmt.count(r.charges + r.tax)}"></div>
+                <div class="s" th:text="'charges Rs ' + ${@fmt.count(r.charges)} + ' · tax Rs ' + ${@fmt.count(r.tax)}"></div></div>
+            <div class="card tile"><div class="k">Days held: winners · losers</div>
+                <div class="v" th:text="${@fmt.decimal(r.avgDaysWinners, 0)} + ' · ' + ${@fmt.decimal(r.avgDaysLosers, 0)}"></div>
+                <div class="s">holding losers longer is a classic leak</div></div>
+        </div>
+
+        <div class="note">
+            <b>What your journal says</b>
+            <ul class="howto" style="margin-top:4px">
+                <li th:each="i : ${r.insights}" th:text="${i}"></li>
+            </ul>
+        </div>
+
+        <div class="journal-groups">
+            <div th:each="e : ${r.breakdowns}" th:if="${!e.value.isEmpty()}">
+                <h4 th:text="'By ' + ${#strings.toLowerCase(e.key)}"></h4>
+                <table>
+                    <thead><tr><th th:text="${e.key}"></th><th class="num">Trades</th><th class="num">Win</th><th class="num">Avg</th><th class="num">Net Rs</th></tr></thead>
+                    <tbody>
+                    <tr th:each="g : ${e.value}">
+                        <td style="white-space:normal" th:text="${g.key}"></td>
+                        <td class="num" th:text="${g.trades}"></td>
+                        <td class="num" th:text="${@fmt.decimal(g.winRate, 0)} + '%'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(g.avgNetPct)}" th:text="${@fmt.pct(g.avgNetPct)}"></td>
+                        <td class="num" th:style="${@fmt.heat(g.netPnl / 10000, 5)}"><b th:text="${@fmt.count(g.netPnl)}"></b></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- closed trades -->
+    <section class="card block">
+        <h2>Closed trades <span class="muted small" th:text="${closed.size()}"></span></h2>
+        <p th:if="${closed.isEmpty()}" class="muted">No closed trades in this period.</p>
+        <div class="table-wrap" th:unless="${closed.isEmpty()}">
+            <table>
+                <thead><tr><th>Stock</th><th>Rule</th><th>Regime</th><th>Bought → sold</th><th class="num">Qty</th><th class="num">Entry → exit</th>
+                    <th class="num">Charges + tax</th><th class="num">Net Rs</th><th class="num">Net %</th><th class="num">R</th><th>Plan</th>
+                    <th>Mood</th><th>Mistakes · lesson</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="v : ${closed}" th:with="t=${v.t}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
+                    <td class="small" style="white-space:normal;max-width:160px" th:text="${t.rule}"></td>
+                    <td class="small" th:text="${t.marketRegime}"></td>
+                    <td class="small" th:text="${t.entryDate} + ' → ' + ${t.exitDate} + ' (' + ${v.b.daysHeld} + 'd)'"></td>
+                    <td class="num" th:text="${@fmt.count(t.quantity)}"></td>
+                    <td class="num" th:text="${@fmt.price(t.entryPrice)} + ' → ' + ${@fmt.price(t.exitPrice)}"></td>
+                    <td class="num muted" th:text="${@fmt.count(v.b.charges + v.b.tax)}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(v.b.netPnl)}"><b th:text="${@fmt.count(v.b.netPnl)}"></b></td>
+                    <td class="num" th:classappend="${@fmt.tone(v.b.netPct)}" th:text="${@fmt.pct(v.b.netPct)}"></td>
+                    <td class="num" th:text="${@fmt.decimal(v.b.rMultiple, 2)}"></td>
+                    <td><span class="pill" th:if="${t.followedPlan != null}" th:classappend="${t.followedPlan} ? 'good' : 'bad'" th:text="${t.followedPlan} ? 'Followed' : 'Broke'"></span></td>
+                    <td class="small" th:text="${t.moodEntry} + (${t.moodExit != null} ? ' → ' + ${t.moodExit} : '')"></td>
+                    <td class="small" style="white-space:normal;min-width:200px">
+                        <span th:each="m : ${t.mistakeList()}" class="pill warn" style="margin:1px" th:text="${m}"></span>
+                        <div class="muted" th:if="${t.lesson != null}" th:text="${t.lesson}"></div>
+                    </td>
+                    <td style="white-space:nowrap">
+                        <a class="btn sm" th:href="@{/journal/{id}/edit(id=${t.id})}">Edit</a>
+                        <form method="post" th:action="@{/journal/{id}/delete(id=${t.id})}" style="display:inline"
+                              onsubmit="return confirm('Delete this trade from the journal?')">
+                            <button class="btn sm" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

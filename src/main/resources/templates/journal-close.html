@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Close trade')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <a class="muted small" th:href="@{/journal}">← Journal</a>
+            <h1 th:text="'Close ' + ${t.symbol}">Close trade</h1>
+            <p th:text="'Bought ' + ${@fmt.count(t.quantity)} + ' at ' + ${@fmt.price(t.entryPrice)} + ' on ' + ${t.entryDate}
+                        + (${t.rule != null} ? ' · ' + ${t.rule} : '')
+                        + (${t.stopPrice != null} ? ' · stop ' + ${@fmt.price(t.stopPrice)} : '')
+                        + (${t.targetPrice != null} ? ' · target ' + ${@fmt.price(t.targetPrice)} : '')"></p>
+        </div>
+    </div>
+
+    <div class="note" th:if="${v.lastClose != null}"
+         th:text="'At the latest close (' + ${v.lastDate} + ', ' + ${@fmt.price(v.lastClose)} + ') this trade is worth Rs ' + ${@fmt.count(v.b.netPnl)}
+                  + ' (' + ${@fmt.pct(v.b.netPct)} + ') after selling charges, before tax.'"></div>
+
+    <form class="card journal-form" method="post" th:action="@{/journal/{id}/close(id=${t.id})}">
+        <h3>The exit</h3>
+        <div class="fields">
+            <label>Date sold <input type="date" name="exitDate" required th:value="${exitDate}"></label>
+            <label>Price received <input type="number" step="0.01" min="0" name="exitPrice" required th:value="${exitPrice}"></label>
+            <label>Exit reason
+                <select name="exitReason"><option value="">—</option>
+                    <option th:each="x : ${exitReasons}" th:value="${x}" th:text="${x}"></option></select></label>
+            <label>Mood when selling
+                <select name="moodExit"><option value="">—</option>
+                    <option th:each="m : ${moods}" th:value="${m}" th:text="${m}"></option></select></label>
+            <label>Did you follow your plan?
+                <select name="followedPlan" required><option value="">—</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+        </div>
+        <div class="mistakes">
+            <span class="muted small">Any mistakes? (tick all that apply)</span>
+            <label th:each="m : ${mistakeTags}"><input type="checkbox" name="mistakes" th:value="${m}"> <span th:text="${m}"></span></label>
+        </div>
+        <label class="wide">Lesson <textarea name="lesson" rows="3" placeholder="what would you do differently?"></textarea></label>
+        <p class="muted small">Charges (tiered broker commission, SEBON fee, DP charge) and capital gains tax are calculated when you save.</p>
+        <div style="display:flex;gap:8px">
+            <button class="btn primary" type="submit">Close trade</button>
+            <a class="btn" th:href="@{/journal}">Cancel</a>
+        </div>
+    </form>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

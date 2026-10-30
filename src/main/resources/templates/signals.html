@@ -46,7 +46,8 @@
                     <tbody>
                     <tr th:if="${s.buyNow.isEmpty()}"><td colspan="8" class="muted">Nothing qualifies today. That's a valid answer: check the next-entry list instead.</td></tr>
                     <tr th:each="p : ${s.buyNow}">
-                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.f.symbol})}" th:text="${p.f.symbol}"></a><small th:text="${p.f.sector}"></small></td>
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.f.symbol})}" th:text="${p.f.symbol}"></a><small th:text="${p.f.sector}"></small>
+                            <a class="small" th:href="@{/journal/new(symbol=${p.f.symbol},rule=${p.setup},stop=${#numbers.formatDecimal(p.stop,1,2,'POINT')},target=${#numbers.formatDecimal(p.target1,1,2,'POINT')})}">Log ✎</a></td>
                         <td><span class="pill good" th:text="${p.setup}"></span><br><small class="muted" th:text="'Score ' + ${p.score}"></small></td>
                         <td class="num"><b th:text="${@fmt.price(p.entry)}"></b><br><small class="muted" th:text="'max ' + ${@fmt.price(p.entryMax)}"></small></td>
                         <td class="num neg" th:text="${@fmt.price(p.stop)}"></td>

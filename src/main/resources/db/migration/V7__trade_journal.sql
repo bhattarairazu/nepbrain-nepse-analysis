@@ -1,0 +1,28 @@
+-- Your own trades: what you planned, what happened, and how you felt, for monthly review.
+CREATE TABLE journal_trade (
+    id             BIGINT         NOT NULL AUTO_INCREMENT,
+    symbol         VARCHAR(20)    NOT NULL,
+    sector         VARCHAR(80)    NULL,
+    rule_name      VARCHAR(120)   NULL COMMENT 'which rule or setup the trade followed',
+    market_regime  VARCHAR(60)    NULL COMMENT 'market regime when bought',
+    entry_date     DATE           NOT NULL,
+    entry_price    DECIMAL(12, 2) NOT NULL,
+    quantity       INT            NOT NULL,
+    stop_price     DECIMAL(12, 2) NULL,
+    target_price   DECIMAL(12, 2) NULL,
+    mood_entry     VARCHAR(30)    NULL,
+    entry_notes    VARCHAR(1000)  NULL,
+    exit_date      DATE           NULL,
+    exit_price     DECIMAL(12, 2) NULL,
+    exit_reason    VARCHAR(20)    NULL COMMENT 'TARGET | STOP | RULE | TIME | MANUAL',
+    mood_exit      VARCHAR(30)    NULL,
+    followed_plan  TINYINT(1)     NULL,
+    mistakes       VARCHAR(500)   NULL COMMENT 'comma-separated tags',
+    lesson         VARCHAR(1000)  NULL,
+    created_at     DATETIME       NOT NULL,
+    updated_at     DATETIME       NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_journal_symbol (symbol),
+    KEY idx_journal_entry (entry_date),
+    KEY idx_journal_exit (exit_date)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

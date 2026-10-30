@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Trade journal')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <a class="muted small" th:href="@{/journal}">← Journal</a>
+            <h1 th:text="${title}">Log a buy</h1>
+            <p>Write the plan before you buy: the rule, the stop and the target. Be honest about your mood; it's for you.</p>
+        </div>
+    </div>
+
+    <form class="card journal-form" method="post" th:action="@{/journal/save}">
+        <input type="hidden" name="id" th:value="${t.id}">
+        <h3>The trade</h3>
+        <div class="fields">
+            <label>Symbol <input name="symbol" list="symbols" required th:value="${t.symbol}" autocomplete="off"></label>
+            <label>Sector <input name="sector" th:value="${t.sector}" placeholder="filled from the stock list if empty"></label>
+            <label>Date bought <input type="date" name="entryDate" required th:value="${t.entryDate}"></label>
+            <label>Price paid <input type="number" step="0.01" min="0" name="entryPrice" required th:value="${t.entryPrice}"></label>
+            <label>Quantity <input type="number" step="1" min="1" name="quantity" required th:value="${t.quantity > 0} ? ${t.quantity} : ''"></label>
+        </div>
+        <datalist id="symbols"><option th:each="s : ${symbols}" th:value="${s}"></option></datalist>
+
+        <h3>The plan</h3>
+        <div class="fields">
+            <label>Rule / setup <input name="rule" list="rules" th:value="${t.rule}" placeholder="which rule did this follow?"></label>
+            <datalist id="rules"><option th:each="r : ${rules}" th:value="${r}"></option></datalist>
+            <label>Market regime
+                <select name="marketRegime">
+                    <option value="">—</option>
+                    <option th:each="r : ${regimes}" th:value="${r}" th:text="${r}" th:selected="${r == t.marketRegime}"></option>
+                </select></label>
+            <label>Stop <input type="number" step="0.01" min="0" name="stopPrice" th:value="${t.stopPrice}"></label>
+            <label>Target <input type="number" step="0.01" min="0" name="targetPrice" th:value="${t.targetPrice}"></label>
+            <label>Mood when buying
+                <select name="moodEntry">
+                    <option value="">—</option>
+                    <option th:each="m : ${moods}" th:value="${m}" th:text="${m}" th:selected="${m == t.moodEntry}"></option>
+                </select></label>
+        </div>
+        <label class="wide">Why this trade? <textarea name="entryNotes" rows="3" th:text="${t.entryNotes}"
+                  placeholder="setup, chart, floorsheet, news, what would prove you wrong"></textarea></label>
+
+        <th:block th:if="${t.id != null and !t.isOpen()}">
+            <h3>The exit</h3>
+            <div class="fields">
+                <label>Date sold <input type="date" name="exitDate" th:value="${t.exitDate}"></label>
+                <label>Price received <input type="number" step="0.01" min="0" name="exitPrice" th:value="${t.exitPrice}"></label>
+                <label>Exit reason
+                    <select name="exitReason"><option value="">—</option>
+                        <option th:each="x : ${exitReasons}" th:value="${x}" th:text="${x}" th:selected="${x == t.exitReason}"></option></select></label>
+                <label>Mood when selling
+                    <select name="moodExit"><option value="">—</option>
+                        <option th:each="m : ${moods}" th:value="${m}" th:text="${m}" th:selected="${m == t.moodExit}"></option></select></label>
+                <label>Followed the plan?
+                    <select name="followedPlan"><option value="">—</option>
+                        <option value="yes" th:selected="${t.followedPlan != null and t.followedPlan}">Yes</option>
+                        <option value="no" th:selected="${t.followedPlan != null and !t.followedPlan}">No</option></select></label>
+            </div>
+            <div class="mistakes">
+                <span class="muted small">Mistakes</span>
+                <label th:each="m : ${mistakeTags}"><input type="checkbox" name="mistakes" th:value="${m}" th:checked="${t.mistakeList().contains(m)}"> <span th:text="${m}"></span></label>
+            </div>
+            <label class="wide">Lesson <textarea name="lesson" rows="2" th:text="${t.lesson}"></textarea></label>
+        </th:block>
+
+        <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn primary" type="submit">Save</button>
+            <a class="btn" th:href="@{/journal}">Cancel</a>
+        </div>
+    </form>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
