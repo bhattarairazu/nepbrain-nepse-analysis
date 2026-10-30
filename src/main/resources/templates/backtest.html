@@ -34,6 +34,67 @@
             a positive median, and beating the market in <b>both halves</b> of the period. Past results don't guarantee future ones.
         </div>
 
+        <!-- SMC and combinations, walk-forward -->
+        <section class="card block" th:if="${adv != null}">
+            <h2>SMC and combined rules · walk-forward test</h2>
+            <p class="sub">Designed on <span th:text="${@fmt.day(adv.from)}"></span> → <span th:text="${@fmt.day(adv.splitDate)}"></span>,
+                then checked out-of-sample on <span th:text="${@fmt.day(adv.splitDate)}"></span> → <span th:text="${@fmt.day(adv.to)}"></span>.
+                Buy at the next open; targets are limit sells filled when the high reaches them; stops are checked at the close
+                and sold at the next open (NEPSE has no stop orders); <span th:text="${cost}"></span>% costs; prices bonus/right adjusted.</p>
+
+            <div class="note">
+                <th:block th:if="${adv.passed().isEmpty()}">
+                    <b>No rule passed:</b> none won more than half its trades and made money after costs in both the design period
+                    and the out-of-sample period. Nothing here is safe to follow as a rule yet.
+                </th:block>
+                <th:block th:unless="${adv.passed().isEmpty()}">
+                    <b>Passed in both periods:</b>
+                    <th:block th:each="g : ${adv.passed()}">
+                        <br><b th:text="${g.setup.title}"></b>: out-of-sample <span th:text="${@fmt.decimal(g.outOfSample.winRate, 0)}"></span>% winners,
+                        <span th:text="${@fmt.pct(g.outOfSample.avgNet)}"></span> per trade over <span th:text="${g.outOfSample.trades}"></span> trades.
+                        <th:block th:if="${!g.signalsToday.isEmpty()}">Signals at the last close:
+                            <a th:each="sym : ${g.signalsToday}" class="chip" th:href="@{/stock/{x}(x=${sym})}" th:text="${sym}"></a></th:block>
+                    </th:block>
+                    <br><span class="muted">Testing many rules means one can pass by luck; keep positions small and re-check as data grows.</span>
+                </th:block>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr><th rowspan="2">Rule</th><th class="num" colspan="3">Design period</th><th class="num" colspan="3">Out-of-sample</th>
+                        <th class="num" colspan="3">Whole year</th><th rowspan="2">Exits</th><th rowspan="2">Verdict</th><th rowspan="2">Signals at last close</th></tr>
+                    <tr><th class="num">Trades</th><th class="num">Win</th><th class="num">Avg</th>
+                        <th class="num">Trades</th><th class="num">Win</th><th class="num">Avg</th>
+                        <th class="num">Trades</th><th class="num">Win</th><th class="num">Avg</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="x : ${adv.setups}">
+                        <td style="white-space:normal;min-width:280px"><b th:text="${x.setup.title}"></b> <small class="muted" th:text="'· ' + ${x.setup.family}"></small>
+                            <br><small class="muted" th:text="${x.setup.rule}"></small></td>
+                        <td class="num" th:text="${x.design.trades}"></td>
+                        <td class="num" th:classappend="${x.design.winRate > 50} ? 'pos'" th:text="${x.design.trades > 0} ? ${@fmt.decimal(x.design.winRate, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgNet, 3)}" th:text="${x.design.trades > 0} ? ${@fmt.pct(x.design.avgNet)} : '—'"></td>
+                        <td class="num" th:text="${x.outOfSample.trades}"></td>
+                        <td class="num" th:classappend="${x.outOfSample.winRate > 50} ? 'pos'" th:text="${x.outOfSample.trades > 0} ? ${@fmt.decimal(x.outOfSample.winRate, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.outOfSample.avgNet, 3)}" th:text="${x.outOfSample.trades > 0} ? ${@fmt.pct(x.outOfSample.avgNet)} : '—'"></td>
+                        <td class="num" th:text="${x.all.trades}"></td>
+                        <td class="num" th:text="${x.all.trades > 0} ? ${@fmt.decimal(x.all.winRate, 0)} + '%' : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.all.avgNet)}" th:text="${x.all.trades > 0} ? ${@fmt.pct(x.all.avgNet)} : '—'"></td>
+                        <td class="small muted" style="white-space:normal">
+                            <span th:each="e : ${x.exitReasons}" th:text="${e.key} + ' ' + ${e.value} + ' '"></span>
+                        </td>
+                        <td><span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span></td>
+                        <td style="white-space:normal;max-width:200px">
+                            <a th:each="sym : ${x.signalsToday}" class="chip" th:href="@{/stock/{y}(y=${sym})}" th:text="${sym}"></a>
+                            <span th:if="${x.signalsToday.isEmpty()}" class="muted">—</span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- standard strategies -->
         <section class="card block" th:if="${std != null}">
             <h2>Standard strategies (textbook rules with their own exits)</h2>
@@ -244,7 +305,7 @@
                     <td th:text="${x.kind}"></td>
                     <td th:text="${x.from} + ' → ' + ${x.to}"></td>
                     <td class="num" th:text="${x.sessions}"></td>
-                    <td th:text="(${x.horizon != null} ? 'hold ' + ${x.horizon} + (${x.marketFilter} ? ', market filter' : '') : 'own exit rules')
+                    <td th:text="(${x.kind == 'ADVANCED'} ? 'walk-forward, structural stops' : (${x.horizon != null} ? 'hold ' + ${x.horizon} + (${x.marketFilter} ? ', market filter' : '') : 'own exit rules'))
                                  + (${x.priceAdjusted} ? '' : ' · unadjusted prices (superseded)')"></td>
                     <td class="num" th:text="${@fmt.count(x.trades)}"></td>
                 </tr>

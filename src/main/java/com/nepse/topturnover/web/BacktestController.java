@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.BacktestService.CaseStudy;
+import com.nepse.topturnover.analysis.AdvancedStrategyService;
 import com.nepse.topturnover.analysis.StandardStrategyService;
 import com.nepse.topturnover.repository.BacktestRepository;
 
@@ -22,8 +23,11 @@ public class BacktestController {
     private final BacktestService backtest;
     private final StandardStrategyService standard;
     private final BacktestRepository store;
+    private final AdvancedStrategyService advanced;
 
-    public BacktestController(BacktestService backtest, StandardStrategyService standard, BacktestRepository store) {
+    public BacktestController(BacktestService backtest, StandardStrategyService standard, BacktestRepository store,
+                              AdvancedStrategyService advanced) {
+        this.advanced = advanced;
         this.backtest = backtest;
         this.standard = standard;
         this.store = store;
@@ -44,6 +48,7 @@ public class BacktestController {
         model.addAttribute("filter", filter);
         backtest.run(horizon, filter).ifPresent(r -> model.addAttribute("r", r));
         standard.run().ifPresent(sr -> model.addAttribute("std", sr));
+        advanced.run().ifPresent(ar -> model.addAttribute("adv", ar));
         model.addAttribute("savedRuns", store.recentRuns(15));
 
         List<CaseStudy> cases = new ArrayList<>();
