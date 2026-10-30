@@ -77,15 +77,15 @@ public class FeatureService {
         jdbc.query("SELECT symbol, COUNT(*) FROM top_ranking WHERE list_type = 'TURNOVER' AND trade_date IN (:d) GROUP BY symbol",
                 Map.of("d", last10), rs -> { appearances.put(rs.getString(1), rs.getInt(2)); });
 
-        record Row(LocalDate d, double o, double h, double l, double c, double v, double t, double n, double ch) {}
+        record Row(LocalDate d, double o, double h, double l, double c, double v, double t, double n, double ch, double pc) {}
         Map<String, List<Row>> bySymbol = new LinkedHashMap<>();
         jdbc.query("""
-                SELECT symbol, trade_date, open_price, high_price, low_price, close_price, volume, turnover, trades, change_pct
+                SELECT symbol, trade_date, open_price, high_price, low_price, close_price, volume, turnover, trades, change_pct, prev_close
                 FROM daily_price WHERE trade_date BETWEEN :from AND :to ORDER BY symbol, trade_date""",
                 new MapSqlParameterSource().addValue("from", from).addValue("to", day),
                 rs -> {
                     bySymbol.computeIfAbsent(rs.getString(1), k -> new ArrayList<>()).add(new Row(
-                            rs.getObject(2, LocalDate.class), d(rs, 3), d(rs, 4), d(rs, 5), d(rs, 6), d(rs, 7), d(rs, 8), d(rs, 9), d(rs, 10)));
+                            rs.getObject(2, LocalDate.class), d(rs, 3), d(rs, 4), d(rs, 5), d(rs, 6), d(rs, 7), d(rs, 8), d(rs, 9), d(rs, 10), d(rs, 11)));
                 });
 
         Map<String, StockFeatures> out = new LinkedHashMap<>();
@@ -102,6 +102,8 @@ public class FeatureService {
                 v[i] = r.v(); t[i] = r.t(); tr[i] = r.n(); ch[i] = r.ch();
             }
             fillGaps(c);
+            double[] pc = rows.stream().mapToDouble(Row::pc).toArray();
+            PriceAdjuster.adjust(o, h, l, c, v, pc); // bonus/right shares
             String[] meta = info.getOrDefault(e.getKey(), new String[] {null, null});
             StockSeries series = new StockSeries(e.getKey(), meta[0], meta[1], dates, o, h, l, c, v, t, tr, ch);
             out.put(e.getKey(), FeatureCalculator.compute(series, new FeatureCalculator.ListContext(

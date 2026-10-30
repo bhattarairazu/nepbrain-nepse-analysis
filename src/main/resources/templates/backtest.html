@@ -34,6 +34,66 @@
             a positive median, and beating the market in <b>both halves</b> of the period. Past results don't guarantee future ones.
         </div>
 
+        <!-- standard strategies -->
+        <section class="card block" th:if="${std != null}">
+            <h2>Standard strategies (textbook rules with their own exits)</h2>
+            <p class="sub">Every liquid ordinary share (Rs 1 Cr+ traded on the signal day), <span th:text="${std.sessions}"></span> sessions
+                (<span th:text="${@fmt.day(std.from)}"></span> → <span th:text="${@fmt.day(std.to)}"></span>). Buy at the next open; sell at the open after
+                the exit rule, the stop-loss or the time limit; <span th:text="${cost}"></span>% costs per round trip. Prices are adjusted for bonus and right shares.
+                The market (equal-weight, buy and hold) moved <b th:classappend="${@fmt.tone(std.marketBuyHoldPct)}" th:text="${@fmt.pct(std.marketBuyHoldPct)}"></b> over the same period.</p>
+
+            <div class="note" th:with="good=${std.rules.?[verdict == 'Profitable and consistent' and rule.name() != 'RANDOM']}">
+                <th:block th:if="${good.isEmpty()}">
+                    <b>No standard rule was both profitable and consistent on this data</b> (more than 50% winners, positive average and median after costs,
+                    and positive in both halves of the period). There is no rule here to follow blindly yet.
+                </th:block>
+                <th:block th:unless="${good.isEmpty()}">
+                    <b>Rules that passed:</b>
+                    <th:block th:each="g : ${good}">
+                        <br><b th:text="${g.rule.title}"></b>: <span th:text="${@fmt.decimal(g.winRate, 0)}"></span>% winners,
+                        <span th:text="${@fmt.pct(g.avgNet)}"></span> average per trade over <span th:text="${g.trades}"></span> trades.
+                        <th:block th:if="${!g.signalsToday.isEmpty()}">Signals at the last close:
+                            <a th:each="sym : ${g.signalsToday}" class="chip" th:href="@{/stock/{x}(x=${sym})}" th:text="${sym}"></a></th:block>
+                        <span th:if="${g.signalsToday.isEmpty()}" class="muted">No signal at the last close.</span>
+                    </th:block>
+                    <br><span class="muted">Passed on this period only; size every trade so the stop loses 1–2% of capital at most.</span>
+                </th:block>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Strategy</th><th class="num">Trades</th><th class="num">Win rate</th><th class="num">Avg / trade</th>
+                        <th class="num">Median</th><th class="num">Avg win</th><th class="num">Avg loss</th><th class="num">Days held</th>
+                        <th class="num">vs market</th><th class="num">1st half</th><th class="num">2nd half</th><th class="num">Profit factor</th>
+                        <th>Verdict</th><th>Signals at last close</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${std.rules}">
+                        <td style="white-space:normal;min-width:260px"><b th:text="${x.rule.title}"></b> <small class="muted" th:text="'· ' + ${x.rule.style}"></small>
+                            <br><small class="muted" th:text="${x.rule.description} + ' Stop ' + ${#numbers.formatDecimal(x.rule.stop * 100, 1, 0)} + '%, max ' + ${x.rule.maxHold} + ' sessions.'"></small></td>
+                        <td class="num" th:text="${x.trades}"></td>
+                        <td class="num" th:classappend="${x.winRate > 50} ? 'pos' : ''"><b th:text="${x.trades > 0} ? ${@fmt.decimal(x.winRate, 0)} + '%' : '—'"></b></td>
+                        <td class="num" th:style="${@fmt.heat(x.avgNet, 3)}"><b th:text="${x.trades > 0} ? ${@fmt.pct(x.avgNet)} : '—'"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.medianNet)}" th:text="${x.trades > 0} ? ${@fmt.pct(x.medianNet)} : '—'"></td>
+                        <td class="num pos" th:text="${x.trades > 0} ? ${@fmt.pct(x.avgWin)} : '—'"></td>
+                        <td class="num neg" th:text="${x.trades > 0} ? ${@fmt.pct(x.avgLoss)} : '—'"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.avgHeld, 1)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.avgVsMarket)}" th:text="${x.trades > 0} ? ${@fmt.pct(x.avgVsMarket)} : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.firstHalf)}" th:text="${@fmt.pct(x.firstHalf)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.secondHalf)}" th:text="${@fmt.pct(x.secondHalf)}"></td>
+                        <td class="num" th:text="${x.trades > 0} ? ${@fmt.decimal(x.profitFactor, 2)} : '—'"></td>
+                        <td><span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span></td>
+                        <td style="white-space:normal;max-width:220px">
+                            <a th:each="sym : ${x.signalsToday}" class="chip" th:href="@{/stock/{y}(y=${sym})}" th:text="${sym}"></a>
+                            <span th:if="${x.signalsToday.isEmpty()}" class="muted">—</span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted small">Win rate alone can mislead: a rule winning 65% of trades still loses money if its losses are bigger than its wins.
+                Read win rate together with average per trade, average win vs average loss, and the profit factor (above 1 = profitable).</p>
+        </section>
+
         <!-- recommendations -->
         <section class="card block">
             <h2>Recommendations for the next session</h2>
@@ -170,6 +230,26 @@
                     </table>
                 </div>
             </div>
+        </section>
+        <section class="card block" th:if="${savedRuns != null and !savedRuns.isEmpty()}">
+            <h2>Saved backtest runs</h2>
+            <p class="sub">Every run is kept in MySQL: <code>backtest_run</code> (settings and data range), <code>backtest_result</code>
+                (one row per strategy) and <code>backtest_trade</code> (every simulated trade). Nothing is deleted; an identical rerun isn't stored twice.</p>
+            <table>
+                <thead><tr><th class="num">Run</th><th>Saved</th><th>Kind</th><th>Data</th><th class="num">Sessions</th><th>Settings</th><th class="num">Trades stored</th></tr></thead>
+                <tbody>
+                <tr th:each="x : ${savedRuns}">
+                    <td class="num" th:text="'#' + ${x.id}"></td>
+                    <td th:text="${#temporals.format(x.runAt, 'yyyy-MM-dd HH:mm')}"></td>
+                    <td th:text="${x.kind}"></td>
+                    <td th:text="${x.from} + ' → ' + ${x.to}"></td>
+                    <td class="num" th:text="${x.sessions}"></td>
+                    <td th:text="(${x.horizon != null} ? 'hold ' + ${x.horizon} + (${x.marketFilter} ? ', market filter' : '') : 'own exit rules')
+                                 + (${x.priceAdjusted} ? '' : ' · unadjusted prices (superseded)')"></td>
+                    <td class="num" th:text="${@fmt.count(x.trades)}"></td>
+                </tr>
+                </tbody>
+            </table>
         </section>
     </th:block>
 </main>

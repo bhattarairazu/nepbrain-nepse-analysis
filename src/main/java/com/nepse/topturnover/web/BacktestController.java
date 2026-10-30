@@ -13,14 +13,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.BacktestService.CaseStudy;
+import com.nepse.topturnover.analysis.StandardStrategyService;
+import com.nepse.topturnover.repository.BacktestRepository;
 
 /** Strategy backtests, a "what did the rules say that day" lookup, and recommendations only from proven strategies. */
 @Controller
 public class BacktestController {
     private final BacktestService backtest;
+    private final StandardStrategyService standard;
+    private final BacktestRepository store;
 
-    public BacktestController(BacktestService backtest) {
+    public BacktestController(BacktestService backtest, StandardStrategyService standard, BacktestRepository store) {
         this.backtest = backtest;
+        this.standard = standard;
+        this.store = store;
     }
 
     @GetMapping("/backtest")
@@ -37,6 +43,8 @@ public class BacktestController {
         model.addAttribute("barExcess", BacktestService.CONF_MIN_EXCESS);
         model.addAttribute("filter", filter);
         backtest.run(horizon, filter).ifPresent(r -> model.addAttribute("r", r));
+        standard.run().ifPresent(sr -> model.addAttribute("std", sr));
+        model.addAttribute("savedRuns", store.recentRuns(15));
 
         List<CaseStudy> cases = new ArrayList<>();
         if (symbols != null && date != null) {

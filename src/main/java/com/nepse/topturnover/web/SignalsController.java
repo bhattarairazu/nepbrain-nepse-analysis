@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 
 import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.Indicators;
+import com.nepse.topturnover.analysis.PriceAdjuster;
 import com.nepse.topturnover.analysis.SignalService;
 
 /** The Signals page, and the small JSON feed behind the hover chart on every stock link. */
@@ -54,12 +55,17 @@ public class SignalsController {
         String sym = symbol.toUpperCase(Locale.ROOT);
         int n = Math.max(10, Math.min(days, 500));
         List<Object[]> rows = new ArrayList<>(jdbc.query("""
-                SELECT trade_date, open_price, high_price, low_price, close_price, volume FROM daily_price
+                SELECT trade_date, open_price, high_price, low_price, close_price, volume, prev_close FROM daily_price
                 WHERE symbol = :s ORDER BY trade_date DESC LIMIT :n""",
                 Map.of("s", sym, "n", n + 50),
                 (rs, i) -> new Object[] {rs.getObject(1, LocalDate.class).toString(), rs.getDouble(2), rs.getDouble(3),
-                        rs.getDouble(4), rs.getDouble(5), rs.getDouble(6)}));
+                        rs.getDouble(4), rs.getDouble(5), rs.getDouble(6), rs.getDouble(7)}));
         Collections.reverse(rows);
+        // adjust for bonus/right shares so the chart has no artificial gaps
+        double[][] cols = new double[6][rows.size()];
+        for (int i = 0; i < rows.size(); i++) for (int k = 1; k <= 6; k++) cols[k - 1][i] = (double) rows.get(i)[k];
+        PriceAdjuster.adjust(cols[0], cols[1], cols[2], cols[3], cols[4], cols[5]);
+        for (int i = 0; i < rows.size(); i++) for (int k = 1; k <= 5; k++) rows.get(i)[k] = cols[k - 1][i];
         double[] close = rows.stream().mapToDouble(r -> (double) r[4]).toArray();
         List<Double> ema20 = new ArrayList<>(), ema50 = new ArrayList<>();
         for (int i = 0; i < close.length; i++) {

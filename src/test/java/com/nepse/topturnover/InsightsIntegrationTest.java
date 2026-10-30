@@ -55,12 +55,14 @@ class InsightsIntegrationTest {
     @Autowired com.nepse.topturnover.analysis.SectorAnalysisService sectorAnalysis;
     @Autowired com.nepse.topturnover.analysis.SignalService signalService;
     @Autowired com.nepse.topturnover.analysis.BacktestService backtest;
+    @Autowired com.nepse.topturnover.analysis.StandardStrategyService standard;
 
     @BeforeAll
     void seed() {
         seedInto(jdbc, repo);
         features.evict();
         backtest.evict();
+        standard.evict();
     }
 
     /** Also used by DemoDataSeeder. */
@@ -200,6 +202,24 @@ class InsightsIntegrationTest {
         mvc.perform(get("/backtest").param("h", "5").param("symbols", "BRK, CHN").param("date", dates.get(dates.size() - 1).toString()))
                 .andExpect(status().isOk()).andExpect(content().string(containsString("Strategy results")))
                 .andExpect(content().string(containsString("Breakout from a quiet base")));
+    }
+
+    @Test
+    void standardStrategiesRunWithTheirOwnExits() throws Exception {
+        var r = standard.run().orElseThrow();
+        assertEquals(com.nepse.topturnover.analysis.StandardStrategyService.Rule.values().length, r.rules().size());
+        var random = r.rules().stream().filter(x -> x.rule().name().equals("RANDOM")).findFirst().orElseThrow();
+        assertTrue(random.trades() >= 200, "benchmark trades: " + random.trades());
+        for (var x : r.rules()) {
+            for (var t : x.recent()) {
+                assertTrue(t.entryDate().isAfter(t.signal()), "entry after the signal day");
+                assertTrue(!t.exitDate().isBefore(t.entryDate()));
+                assertTrue(t.held() <= x.rule().getMaxHold());
+            }
+        }
+        mvc.perform(get("/backtest")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("Standard strategies")))
+                .andExpect(content().string(containsString("RSI(2) pullback")));
     }
 
     private static List<String> symbols(List<InsightService.PatternGroup> groups, Pattern p) {

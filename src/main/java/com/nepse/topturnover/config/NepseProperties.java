@@ -43,5 +43,13 @@ public record NepseProperties(Market market, Crawl crawl, Analysis analysis, His
     public record Analysis(int topN) {}
 
     /** Backfilling past sessions and loading sectors through the page's own date/sector filter. */
-    public record History(String ajaxUrl, int delaySeconds, int maxSessions, int sectorRefreshDays) {}
+    /** mondayFridaySince: first date of NEPSE's Monday-Friday week; before it the week was Sunday-Thursday. */
+    public record History(String ajaxUrl, int delaySeconds, int maxSessions, int sectorRefreshDays, String mondayFridaySince) {
+        public boolean wasTradingWeekday(java.time.LocalDate d) {
+            java.time.DayOfWeek w = d.getDayOfWeek();
+            boolean newWeek = !d.isBefore(java.time.LocalDate.parse(mondayFridaySince));
+            return newWeek ? w != java.time.DayOfWeek.SATURDAY && w != java.time.DayOfWeek.SUNDAY
+                           : w != java.time.DayOfWeek.FRIDAY && w != java.time.DayOfWeek.SATURDAY;
+        }
+    }
 }

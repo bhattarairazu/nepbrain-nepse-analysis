@@ -3,3 +3,4 @@ logs/
 .DS_Store
 config/application.properties
 scripts/mysql-setup.sql
+data/export/

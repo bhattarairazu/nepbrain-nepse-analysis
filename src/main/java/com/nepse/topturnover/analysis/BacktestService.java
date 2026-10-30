@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import com.nepse.topturnover.analysis.FeatureCalculator.ListContext;
+import com.nepse.topturnover.repository.BacktestRepository;
 
 /**
  * Replays every stored session with only the data known that day (no look-ahead), applies each strategy,
@@ -103,12 +104,14 @@ public class BacktestService {
     // ------------------------------------------------------------------
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final BacktestRepository store;
     private final Map<String, Result> cache = new HashMap<>();
     private Market cachedMarket;
     private LocalDate cachedFor;
 
-    public BacktestService(NamedParameterJdbcTemplate jdbc) {
+    public BacktestService(NamedParameterJdbcTemplate jdbc, BacktestRepository store) {
         this.jdbc = jdbc;
+        this.store = store;
     }
 
     public synchronized void evict() {
@@ -164,7 +167,20 @@ public class BacktestService {
         Result r = new Result(m.dates[MIN_HISTORY], m.dates[last], m.dates.length, horizon, m.series.size(),
                 results, latest, m.dates[last], marketFilter, marketUp(m, last));
         cache.put(key, r);
+        save(r, trades);
         return Optional.of(r);
+    }
+
+    /** Keeps every run and trade in MySQL (backtest_run / backtest_result / backtest_trade). */
+    private void save(Result r, Map<Strategy, List<Trade>> trades) {
+        List<BacktestRepository.SummaryRow> sums = r.strategies().stream().map(s -> new BacktestRepository.SummaryRow(
+                s.strategy().name(), s.strategy().getTitle(), s.trades(), s.winRate(), s.avgNet(), s.medianNet(), s.avgExcess(),
+                s.excessFirstHalf(), s.excessSecondHalf(), s.profitFactor(), s.verdict())).toList();
+        List<BacktestRepository.TradeRow> rows = new ArrayList<>();
+        trades.forEach((st, list) -> list.forEach(t -> rows.add(new BacktestRepository.TradeRow(st.name(), t.symbol(), t.signalDate(),
+                t.entryDate(), t.entry(), t.exitDate(), t.exit(), null, null, t.netPct(), t.marketPct()))));
+        store.saveIfNew(new BacktestRepository.RunKey("CUSTOM", r.from(), r.to(), r.sessions(), r.horizon(), r.marketFilter()),
+                COST_PCT, null, sums, rows);
     }
 
     /** What every strategy said about one stock on one day, and what happened afterwards. */
@@ -322,6 +338,11 @@ public class BacktestService {
                 m.turnoverRank.getOrDefault(t, Map.of()).get(s.symbol), m.volumeRank.getOrDefault(t, Map.of()).get(s.symbol), app));
     }
 
+    /** The aligned price history, shared with {@link StandardStrategyService}. */
+    synchronized Market data() {
+        return market();
+    }
+
     private Market market() {
         LocalDate latest = jdbc.queryForObject("SELECT MAX(trade_date) FROM trading_day", Map.of(), LocalDate.class);
         if (latest == null) return null;
@@ -332,14 +353,14 @@ public class BacktestService {
         Map<LocalDate, Integer> pos = new HashMap<>();
         for (int k = 0; k < m.dates.length; k++) pos.put(m.dates[k], k);
 
-        record Row(String sym, String name, String sector, int t, double o, double h, double l, double c, double v, double to, double tr, double ch) {}
+        record Row(String sym, String name, String sector, int t, double o, double h, double l, double c, double v, double to, double tr, double ch, double pc) {}
         Map<String, List<Row>> rows = new LinkedHashMap<>();
         jdbc.query("""
                 SELECT p.symbol, s.name, s.sector, p.trade_date, p.open_price, p.high_price, p.low_price, p.close_price,
-                       p.volume, p.turnover, p.trades, p.change_pct
+                       p.volume, p.turnover, p.trades, p.change_pct, p.prev_close
                 FROM daily_price p LEFT JOIN stock s ON s.symbol = p.symbol ORDER BY p.symbol, p.trade_date""", Map.of(), rs -> {
             rows.computeIfAbsent(rs.getString(1), k -> new ArrayList<>()).add(new Row(rs.getString(1), rs.getString(2), rs.getString(3),
-                    pos.get(rs.getObject(4, LocalDate.class)), d(rs, 5), d(rs, 6), d(rs, 7), d(rs, 8), d(rs, 9), d(rs, 10), d(rs, 11), d(rs, 12)));
+                    pos.get(rs.getObject(4, LocalDate.class)), d(rs, 5), d(rs, 6), d(rs, 7), d(rs, 8), d(rs, 9), d(rs, 10), d(rs, 11), d(rs, 12), d(rs, 13)));
         });
         double[] sum = new double[m.dates.length];
         int[] cnt = new int[m.dates.length];
@@ -354,6 +375,8 @@ public class BacktestService {
                 if (Sectors.isEquity(r.sector()) && !Double.isNaN(r.ch()) && Math.abs(r.ch()) <= 10.5) { sum[r.t()] += r.ch(); cnt[r.t()]++; }
             }
             for (int k = 1; k < s.size(); k++) if (Double.isNaN(s.close[k])) s.close[k] = s.close[k - 1];
+            double[] prev = list.stream().mapToDouble(Row::pc).toArray();
+            PriceAdjuster.adjust(s.open, s.high, s.low, s.close, s.volume, prev); // bonus/right shares
             m.series.put(s.symbol, s);
         }
         m.index = new double[m.dates.length];

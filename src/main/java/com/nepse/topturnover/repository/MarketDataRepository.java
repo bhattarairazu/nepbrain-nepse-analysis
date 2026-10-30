@@ -39,6 +39,16 @@ public class MarketDataRepository {
         return Optional.ofNullable(jdbc.queryForObject("SELECT MAX(trade_date) FROM trading_day", LocalDate.class));
     }
 
+    public boolean isKnownNonTradingDay(LocalDate day) {
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM non_trading_day WHERE trade_date = ?", Integer.class, day);
+        return n != null && n > 0;
+    }
+
+    public void markNonTradingDay(LocalDate day, String note) {
+        jdbc.update("INSERT IGNORE INTO non_trading_day(trade_date, checked_at, note) VALUES (?, ?, ?)",
+                day, LocalDateTime.now().withNano(0), note);
+    }
+
     public Optional<LocalDate> earliestDay() {
         return Optional.ofNullable(jdbc.queryForObject("SELECT MIN(trade_date) FROM trading_day", LocalDate.class));
     }

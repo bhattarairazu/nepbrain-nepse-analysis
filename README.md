@@ -102,6 +102,21 @@ java -jar target/nepse-topturnover.jar --server.port=8081 --spring.datasource.ur
 ```
 Fictional symbols (BRK, CLX, CAP, CHN, BLK, OPR, RTL, INST) each show one planted pattern. Never seed `nepse_analysis`.
 
+## Backtest data kept in MySQL
+- Every backtest run is stored permanently: `backtest_run`, `backtest_result` (one row per strategy) and `backtest_trade`
+  (every simulated trade). Nothing deletes them; an identical rerun isn't stored twice. Runs made before prices were adjusted
+  for bonus/right shares are kept and marked `price_adjusted = 0`.
+- `data/export/` holds the history collected for the backtests (285 sessions, 23 Jul 2025 → 30 Oct 2026) and the backtest runs.
+  To load them into your database (start the app once first so Flyway creates the tables):
+  ```bash
+  mysql -uroot -p nepse_analysis < data/export/market_history_2025-07-23_to_2026-10-30.sql
+  mysql -uroot -p nepse_analysis < data/export/backtest_runs_2026-10-31.sql
+  ```
+  Both use `INSERT IGNORE`, so rows you already have (and your MANUAL sectors) are kept.
+- Prices are adjusted for bonus/right shares in all analysis (`PriceAdjuster`), using the site's adjusted previous close.
+- The backfill follows NEPSE's calendar (Sunday–Thursday before 6 Apr 2026, Monday–Friday since) and remembers
+  confirmed non-trading dates in `non_trading_day`, so they are never requested again.
+
 ## Database
 | Table | Contents |
 |---|---|

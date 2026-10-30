@@ -68,6 +68,11 @@ public final class SharesansarSession {
                 .post(), ajaxUrl);
     }
 
+    /** The page's form token expired; open a new session and retry. */
+    public static final class ExpiredException extends CrawlException {
+        ExpiredException(String message, Throwable cause) { super(message, cause); }
+    }
+
     private interface Call {
         Document run() throws IOException;
     }
@@ -79,6 +84,9 @@ public final class SharesansarSession {
             try {
                 return call.run();
             } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 419) {
+                    throw new ExpiredException(url + " says the form token expired (HTTP 419)", e);
+                }
                 if (e.getStatusCode() == 403 || e.getStatusCode() == 429) {
                     throw new CrawlException(url + " refused the request (HTTP " + e.getStatusCode() + "); stopping", e);
                 }

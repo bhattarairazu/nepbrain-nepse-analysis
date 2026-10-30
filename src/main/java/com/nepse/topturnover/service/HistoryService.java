@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.FeatureService;
+import com.nepse.topturnover.analysis.StandardStrategyService;
 import com.nepse.topturnover.analysis.Sectors;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.crawler.CrawlException;
@@ -52,6 +53,7 @@ public class HistoryService {
     private final MarketDataRepository repo;
     private final FeatureService features;
     private final BacktestService backtest;
+    private final StandardStrategyService standard;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "nepse-history");
         t.setDaemon(true);
@@ -59,8 +61,10 @@ public class HistoryService {
     });
     private volatile Status status = Status.idle();
 
-    public HistoryService(NepseProperties props, MarketDataRepository repo, FeatureService features, BacktestService backtest) {
+    public HistoryService(NepseProperties props, MarketDataRepository repo, FeatureService features, BacktestService backtest,
+                          StandardStrategyService standard) {
         this.backtest = backtest;
+        this.standard = standard;
         this.props = props;
         this.repo = repo;
         this.features = features;
@@ -101,7 +105,6 @@ public class HistoryService {
      * weekends and listed holidays are skipped without a request; a date the site has no data for is skipped.
      */
     public void backfill(int target) {
-        Set<java.time.DayOfWeek> tradingDays = props.market().days();
         Set<LocalDate> holidays = holidays();
         ZonedDateTime now = ZonedDateTime.now(props.market().zone());
         LocalDate d = now.toLocalTime().isBefore(props.crawl().start()) ? now.toLocalDate().minusDays(1) : now.toLocalDate();
@@ -111,7 +114,9 @@ public class HistoryService {
         int maxRequests = target * 2 + 15;
         List<String> log = new ArrayList<>();
         while (have < target && requests < maxRequests) {
-            if (!tradingDays.contains(d.getDayOfWeek()) || holidays.contains(d)) {
+            // NEPSE's calendar for that date (Sunday-Thursday before April 2026), listed holidays,
+            // and dates the site already confirmed had no session are skipped without a request.
+            if (!props.history().wasTradingWeekday(d) || holidays.contains(d) || repo.isKnownNonTradingDay(d)) {
                 d = d.minusDays(1);
                 continue;
             }
@@ -129,18 +134,26 @@ public class HistoryService {
                 }
                 requests++;
                 update(target, stored, already, skipped, "Fetching " + d + " …", log);
-                Document doc = session.day(d);
+                Document doc;
+                try {
+                    doc = session.day(d);
+                } catch (SharesansarSession.ExpiredException expired) {
+                    session = open(); // token expired during a long run: start a fresh session and retry once
+                    doc = session.day(d);
+                }
                 MarketSnapshot s;
                 try {
                     s = SharesansarCrawler.parse(doc);
                 } catch (CrawlException e) {
                     skipped++;
+                    repo.markNonTradingDay(d, "no price table");
                     log.add(d + ": no price table (market closed?)");
                     d = d.minusDays(1);
                     continue;
                 }
                 if (!s.tradeDate().equals(d) || s.quotes().size() < props.crawl().minRows()) {
                     skipped++;
+                    repo.markNonTradingDay(d, "site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows");
                     log.add(d + ": no session (site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows)");
                 } else if (repo.looksStale(s)) {
                     skipped++;
@@ -164,6 +177,7 @@ public class HistoryService {
         int guessed = repo.autoAssignSectors();
         features.evict();
         backtest.evict();
+        standard.evict();
         String done = String.format("Done: %d session(s) stored now, %d already stored, %d date(s) without a session%s.",
                 stored, already, skipped, guessed > 0 ? ", sectors guessed for " + guessed + " new stock(s)" : "");
         if (have < target) done += " Reached the request limit before " + target + " sessions; run it again to continue.";
@@ -180,18 +194,26 @@ public class HistoryService {
         Map<String, String> bySymbol = new HashMap<>();
         try {
             SharesansarSession session = open();
+            Map<String, String> sectorOptions = new java.util.LinkedHashMap<>(session.sectors());
             int done = 0;
-            for (var e : session.sectors().entrySet()) {
+            for (var e : sectorOptions.entrySet()) {
                 String sector = e.getValue();
                 if (!Sectors.ALL.contains(sector)) {
                     log.add("Unknown sector name on the site: " + sector + " (skipped)");
                     continue;
                 }
                 pause();
-                update(session.sectors().size(), done, 0, 0, "Loading " + sector + " …", log);
+                update(sectorOptions.size(), done, 0, 0, "Loading " + sector + " …", log);
                 MarketSnapshot s;
                 try {
-                    s = SharesansarCrawler.parse(session.sector(e.getKey(), date));
+                    Document doc;
+                    try {
+                        doc = session.sector(e.getKey(), date);
+                    } catch (SharesansarSession.ExpiredException expired) {
+                        session = open();
+                        doc = session.sector(e.getKey(), date);
+                    }
+                    s = SharesansarCrawler.parse(doc);
                 } catch (CrawlException ex) {
                     log.add(sector + ": no table");
                     continue;
@@ -208,6 +230,7 @@ public class HistoryService {
         int[] r = repo.applySourceSectors(bySymbol);
         features.evict();
         backtest.evict();
+        standard.evict();
         String msg = String.format("Loaded sectors for %d stocks from ShareSansar (%d changed from before); MANUAL choices kept.", r[0], r[1]);
         repo.logCrawl(now().withNano(0), SOURCE_SECTORS, "STORED", date, msg);
         LOG.info(msg);
