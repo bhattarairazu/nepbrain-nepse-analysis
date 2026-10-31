@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Breakout pullback')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Breakout pullback</h1>
+            <p>A <b>breakout</b> is a close above the previous 20-day high on at least 1.5× the 20-day average volume, with Rs 1 Cr+ traded
+                (one per stock per 10 sessions). Is the best time to buy the pullback after it, rather than the breakout day?
+                Every entry is at the next open, with T+2 settlement (nothing sold before the 3rd session), 0.8% round-trip charges, bonus/right adjusted prices.
+                The variants and exits were fixed before looking at the results.</p>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history. Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note" th:text="${r.sessions} + ' sessions: ' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}
+             + '. Design period until ' + ${@fmt.day(r.split)} + '; the rest is out-of-sample.'"></div>
+
+        <div class="tiles">
+            <div class="card tile"><div class="k">Breakouts</div><div class="v" th:text="${r.breakouts}"></div>
+                <div class="s">close above the 20-day high on 1.5×+ volume</div></div>
+            <div class="card tile"><div class="k">Pulled back and held</div><div class="v" th:text="${r.pullbacks}"></div>
+                <div class="s">usually the very next session</div></div>
+            <div class="card tile"><div class="k">Real retests</div><div class="v" th:text="${r.retests}"></div>
+                <div class="s">ran 5%+, came back to the level on light volume</div></div>
+            <div class="card tile"><div class="k">Retest + turn up</div><div class="v" th:text="${r.turns}"></div>
+                <div class="s">closed above the retest day's high</div></div>
+        </div>
+
+        <section class="card block">
+            <h2>Entries compared</h2>
+            <p class="sub">Hit = the exit's target was reached. Averages are per trade after charges, before tax. Anything below zero in both periods is not an edge.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Entry</th><th>Exit</th><th class="num">Design: trades</th><th class="num">hit</th><th class="num">avg</th><th class="num">median</th>
+                        <th class="num">Out-of-sample: trades</th><th class="num">hit</th><th class="num">avg</th><th class="num">median</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rows}">
+                        <td style="white-space:normal;min-width:260px"><b th:text="${x.entry.title}"></b><br><small class="muted" th:text="${x.entry.rule}"></small></td>
+                        <td class="small" th:text="${x.exit.title}"></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.design.hitPct, 0)} + '%'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${@fmt.pct(x.design.avgPct)}"></td>
+                        <td class="num muted" th:text="${@fmt.pct(x.design.medianPct)}"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.avgPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.medianPct)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Rare-trade accounts (max 1 trade a month)</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Account</th><th class="num">Final value</th><th class="num">Return</th><th class="num">Design</th><th class="num">Out-of-sample</th>
+                        <th class="num">Trades</th><th class="num">Winners</th></tr></thead>
+                    <tbody>
+                    <tr th:each="a : ${r.accounts}">
+                        <td style="white-space:normal;min-width:280px"><b th:text="${a.title}"></b><br><small class="muted" th:text="${a.rule}"></small></td>
+                        <td class="num"><b th:text="'Rs ' + ${@fmt.count(a.finalValue)}"></b></td>
+                        <td class="num" th:style="${@fmt.heat(a.returnPct, 20)}"><b th:text="${@fmt.pct(a.returnPct)}"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(a.designReturnPct)}" th:text="${@fmt.pct(a.designReturnPct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(a.oosReturnPct)}" th:text="${@fmt.pct(a.oosReturnPct)}"></td>
+                        <td class="num" th:text="${a.trades}"></td>
+                        <td class="num" th:text="${a.trades > 0} ? ${@fmt.decimal(a.winRate, 0)} + '%' : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="grid-2" style="margin-top:14px">
+                <div th:each="a : ${r.accounts}">
+                    <h4 th:text="${a.title}"></h4>
+                    <p th:if="${a.trades == 0}" class="muted">No trades.</p>
+                    <table th:unless="${a.trades == 0}">
+                        <thead><tr><th>Stock</th><th>Breakout</th><th>Signal</th><th>Sold</th><th class="num">Net</th><th>Exit</th></tr></thead>
+                        <tbody>
+                        <tr th:each="t : ${a.list}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
+                            <td class="small" th:text="${t.breakout}"></td>
+                            <td class="small" th:text="${t.signal}"></td>
+                            <td class="small" th:text="${t.exitDate}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                            <td class="small muted"><span th:text="${t.reason}"></span> <span class="pill warn" th:unless="${t.design}">oos</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Breakouts of the last 15 sessions</h2>
+            <p th:if="${#lists.isEmpty(r.watch)}" class="muted">No breakouts recently.</p>
+            <table th:unless="${#lists.isEmpty(r.watch)}">
+                <thead><tr><th>Stock</th><th>Breakout</th><th class="num">Level</th><th class="num">Volume</th><th class="num">Last close</th><th class="num">vs level</th><th>State</th></tr></thead>
+                <tbody>
+                <tr th:each="w : ${r.watch}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${w.symbol})}" th:text="${w.symbol}"></a><small th:text="${w.sector}"></small></td>
+                    <td th:text="${w.breakout}"></td>
+                    <td class="num" th:text="${@fmt.price(w.level)}"></td>
+                    <td class="num" th:text="${@fmt.ratio(w.rvol)}"></td>
+                    <td class="num" th:text="${@fmt.price(w.lastClose)}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(w.fromLevelPct)}" th:text="${@fmt.pct(w.fromLevelPct)}"></td>
+                    <td class="small" th:text="${w.state}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card block">
+            <h2>Pullback trades (newest first)</h2>
+            <p class="sub">"Pullback holds" entries with the +7% / −5% / 10-session exit.</p>
+            <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+                <table>
+                    <thead><tr><th>Stock</th><th>Breakout</th><th>Pullback</th><th>Bought</th><th class="num">Entry</th><th>Sold</th><th class="num">Exit</th><th class="num">Days</th><th class="num">Net</th><th>Why</th></tr></thead>
+                    <tbody>
+                    <tr th:each="t : ${r.recent}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
+                        <td class="small" th:text="${t.breakout}"></td>
+                        <td class="small" th:text="${t.signal}"></td>
+                        <td class="small" th:text="${t.entryDate}"></td>
+                        <td class="num" th:text="${@fmt.price(t.entry)}"></td>
+                        <td class="small" th:text="${t.exitDate}"></td>
+                        <td class="num" th:text="${@fmt.price(t.exit)}"></td>
+                        <td class="num" th:text="${t.held}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                        <td class="small muted" th:text="${t.reason}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
