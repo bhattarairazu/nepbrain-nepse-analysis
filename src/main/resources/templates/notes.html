@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Notes')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Notes <span class="muted small" th:if="${b.symbol != null}" th:text="'about ' + ${b.symbol}"></span></h1>
+            <p>Write down what you plan for the next session and the conditions to check first. Price conditions are checked automatically after each
+                session; tick the others yourself. Close a note with what you decided.</p>
+        </div>
+        <a class="btn" th:if="${b.symbol != null}" th:href="@{/notes}">All notes</a>
+    </div>
+
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+
+    <section class="card block">
+        <details th:open="${b.due.isEmpty() and b.upcoming.isEmpty()} or ${prefill != null}">
+            <summary><h2 style="display:inline">+ New note</h2>
+                <span class="muted small" th:text="' for ' + ${@fmt.day(b.nextSession)} + ' (next session) by default'"></span></summary>
+            <div th:replace="~{fragments/notes :: add(${prefill != null ? prefill : b.symbol}, ${b.nextSession}, ${b.symbol != null ? '/notes?symbol=' + b.symbol : '/notes'})}"></div>
+        </details>
+    </section>
+
+    <th:block th:with="back=${b.symbol != null ? '/notes?symbol=' + b.symbol : '/notes'}">
+        <h2 class="section-title">Due today <span class="muted small" th:text="${b.due.size()}"></span></h2>
+        <p th:if="${b.due.isEmpty()}" class="muted">Nothing due. Notes for today and open notes from earlier days show here.</p>
+        <div class="note-grid">
+            <th:block th:each="v : ${b.due}"><article th:replace="~{fragments/notes :: card(${v}, ${back})}"></article></th:block>
+        </div>
+
+        <h2 class="section-title" th:unless="${b.upcoming.isEmpty()}">Upcoming <span class="muted small" th:text="${b.upcoming.size()}"></span></h2>
+        <div class="note-grid">
+            <th:block th:each="v : ${b.upcoming}"><article th:replace="~{fragments/notes :: card(${v}, ${back})}"></article></th:block>
+        </div>
+
+        <h2 class="section-title" th:unless="${b.done.isEmpty()}">Done <span class="muted small" th:text="${b.done.size()}"></span></h2>
+        <div class="note-grid">
+            <th:block th:each="v : ${b.done}"><article th:replace="~{fragments/notes :: card(${v}, ${back})}"></article></th:block>
+        </div>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

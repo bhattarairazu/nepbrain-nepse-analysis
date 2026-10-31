@@ -220,6 +220,19 @@
             </div>
         </section>
 
+        <!-- notes -->
+        <section class="card block">
+            <h2><a th:href="@{/notes(symbol=${rep.symbol})}">Your notes</a> <span class="muted small" th:text="${rep.notes.size()}"></span></h2>
+            <p th:if="${rep.notes.isEmpty()}" class="muted">No notes about this stock yet.</p>
+            <div class="note-grid">
+                <th:block th:each="v : ${rep.notes}"><article th:replace="~{fragments/notes :: card(${v}, ${'/stock/' + rep.symbol})}"></article></th:block>
+            </div>
+            <details style="margin-top:10px">
+                <summary class="btn sm">+ New note about <span th:text="${rep.symbol}"></span></summary>
+                <div th:replace="~{fragments/notes :: add(${rep.symbol}, ${rep.nextSession}, ${'/stock/' + rep.symbol})}"></div>
+            </details>
+        </section>
+
         <!-- journal -->
         <section class="card block">
             <h2><a th:href="@{/journal}">Your trades</a></h2>

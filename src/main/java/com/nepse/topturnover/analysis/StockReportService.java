@@ -18,6 +18,7 @@ import com.nepse.topturnover.analysis.MoveStudyService.StockMoves;
 import com.nepse.topturnover.analysis.WatchlistService.View;
 import com.nepse.topturnover.journal.JournalTrade;
 import com.nepse.topturnover.journal.TradeCosts;
+import com.nepse.topturnover.notes.NotesService;
 import com.nepse.topturnover.repository.JournalRepository;
 import com.nepse.topturnover.repository.MyListRepository;
 
@@ -36,7 +37,7 @@ public class StockReportService {
     public record Report(String symbol, List<Point> summary, Footprint footprint, List<StageEvent> stageHistory, Base base,
                          List<BaseBreakoutService.Event> baseHistory, List<BreakoutLine> breakouts, StockMoves moves, StockView brokers,
                          List<BrokerLine> topBuyers, List<BrokerLine> topSellers, List<View> watch, List<JournalLine> journal,
-                         boolean onMyList) {}
+                         boolean onMyList, List<NotesService.NoteView> notes, java.time.LocalDate nextSession) {}
 
     private final BigPlayerService players;
     private final BaseBreakoutService bases;
@@ -47,10 +48,12 @@ public class StockReportService {
     private final JournalRepository journal;
     private final TradeCosts costs;
     private final MyListRepository myList;
+    private final LeadersService leaders;
+    private final NotesService notes;
 
     public StockReportService(BigPlayerService players, BaseBreakoutService bases, BreakoutPullbackService pullbacks, MoveStudyService moves,
                               BrokerAnalysisService brokers, WatchlistService watchlist, JournalRepository journal, TradeCosts costs,
-                              MyListRepository myList) {
+                              MyListRepository myList, LeadersService leaders, NotesService notes) {
         this.players = players;
         this.bases = bases;
         this.pullbacks = pullbacks;
@@ -60,6 +63,8 @@ public class StockReportService {
         this.journal = journal;
         this.costs = costs;
         this.myList = myList;
+        this.leaders = leaders;
+        this.notes = notes;
     }
 
     public Report report(String symbol) {
@@ -75,16 +80,27 @@ public class StockReportService {
         List<BrokerLine> sellers = bv == null ? List.of() : bv.brokers().reversed().stream().filter(b -> b.netQty() < 0).limit(5).toList();
         List<View> watch = watchlist.forSymbol(sym);
         List<JournalLine> trades = journal.all().stream().filter(t -> t.symbol().equalsIgnoreCase(sym)).map(this::journalLine).toList();
-        return new Report(sym, summary(fp, stages, base, breakouts, mv, bv, watch, trades), fp, stages, base, baseHist, breakouts, mv, bv,
-                buyers, sellers, watch, trades, myList.contains(sym));
+        List<Point> points = summary(fp, stages, base, breakouts, mv, bv, watch, trades);
+        points.add(0, longTerm(sym));
+        return new Report(sym, points, fp, stages, base, baseHist, breakouts, mv, bv,
+                buyers, sellers, watch, trades, myList.contains(sym), notes.forSymbol(sym), notes.nextSession(notes.today()));
     }
 
     /** Just the one-line reads of the studies (no watchlist or journal): cheap enough for a list of stocks. */
     public List<Point> summary(String symbol) {
         String sym = symbol.toUpperCase(Locale.ROOT);
         StockView bv = brokers.days(BigPlayerService.BROKER_WINDOW).isEmpty() ? null : brokers.stock(sym, BigPlayerService.BROKER_WINDOW);
-        return summary(players.today(sym).orElse(null), players.history(sym), bases.current(sym).orElse(null), pullbacks.history(sym),
+        List<Point> points = summary(players.today(sym).orElse(null), players.history(sym), bases.current(sym).orElse(null), pullbacks.history(sym),
                 moves.stock(sym).orElse(null), bv, List.of(), List.of());
+        points.add(0, longTerm(sym));
+        return points;
+    }
+
+    private Point longTerm(String sym) {
+        return leaders.stock(sym).map(x -> new Point(x.stage().getTone(), "Long term", String.format(Locale.ROOT,
+                "%s (score %d): relative strength %d/99, %s from its 52-week high, %s 30-week average.", x.stage().getTitle(), x.score(), x.rsRank(),
+                String.format(Locale.ROOT, "%+.0f%%", x.fromHighPct()), x.close() > x.weekMa30() ? (x.maRising() ? "above a rising" : "above a flat") : "below its")))
+                .orElse(new Point("", "Long term", "Not ranked: needs 6 months of history and Rs 50 lakh+ average daily turnover."));
     }
 
     private JournalLine journalLine(JournalTrade t) {

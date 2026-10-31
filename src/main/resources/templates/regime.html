@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Bull run checklist')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Bull run checklist</h1>
+            <p>Is a bull run actually under way? Daily signs from the stored prices: the market's trend, how many stocks take part, new highs,
+                turnover and sector strength. "Market" is the app's equal-weight index of all ordinary shares (each stock counts the same),
+                not the official NEPSE index.</p>
+        </div>
+        <a class="btn" th:href="@{/leaders}">Long-term leaders →</a>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 70 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <section class="card block">
+            <div class="page-head" style="margin-bottom:0">
+                <div>
+                    <h2><span class="pill" th:classappend="${r.verdictTone}" th:text="${r.verdict}" style="font-size:15px;padding:4px 12px"></span>
+                        <span class="muted small" th:text="${r.passes} + ' of ' + ${r.checks.size()} + ' signs positive at the close of ' + ${@fmt.day(r.lastDay)}"></span></h2>
+                    <p class="sub" style="margin:6px 0 0" th:text="${r.verdictText}"></p>
+                </div>
+            </div>
+            <div class="table-wrap" style="margin-top:10px">
+                <table>
+                    <thead><tr><th>Sign</th><th></th><th class="num">Now</th><th>Why it matters</th></tr></thead>
+                    <tbody>
+                    <tr th:each="c : ${r.checks}">
+                        <td th:text="${c.name}"></td>
+                        <td><span class="pill" th:classappend="${c.status.name() == 'PASS'} ? 'good' : (${c.status.name() == 'FAIL'} ? 'bad' : 'warn')"
+                                  th:text="${c.status.name() == 'PASS'} ? 'Yes' : (${c.status.name() == 'FAIL'} ? 'No' : 'Close')"></span></td>
+                        <td class="num" th:text="${c.value}"></td>
+                        <td class="small muted" style="white-space:normal" th:text="${c.why}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Check by hand: the money behind a bull run</h2>
+            <p class="sub">NEPSE's big runs have been driven by liquidity. These are not in the app's data; check them in NRB's monetary policy and bank notices.</p>
+            <ul class="howto">
+                <li>Interest rates falling: fixed-deposit and base rates lower than three months ago.</li>
+                <li>Banks have money to lend: credit-to-deposit ratio below its limit, interbank rate low.</li>
+                <li>NRB policy easing: margin-loan limits relaxed, policy rate cut, no new restrictions on share loans.</li>
+                <li>New investors: demat and Meroshare accounts growing, IPOs heavily oversubscribed.</li>
+            </ul>
+        </section>
+
+        <section class="card block">
+            <h2>Market, its averages and breadth</h2>
+            <p class="sub">Top: equal-weight market with its 50- and 200-session averages. Bottom: share of stocks above their own 50-session average (%) and
+                daily turnover (20-session average, Rs crore).</p>
+            <div class="chart-box" style="height:300px"><canvas id="regimeChart"></canvas></div>
+            <div class="chart-box" style="height:180px;margin-top:10px"><canvas id="breadthChart"></canvas></div>
+        </section>
+
+        <section class="card block">
+            <h2>Sectors by strength</h2>
+            <p class="sub">Equal weight of each sector's stocks, ranked by 60-session return. The top three are marked as leaders: in bull runs the sectors that
+                lead early often keep leading.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th class="num">Rank</th><th>Sector</th><th class="num">Stocks</th><th class="num">20 sessions</th><th class="num">60 sessions</th>
+                        <th class="num">120 sessions</th><th class="num">Above 50-session avg</th><th class="num">New 52-week highs</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.sectors}">
+                        <td class="num" th:text="${x.rank}"></td>
+                        <td><a th:href="@{/sectors}" th:text="${x.sector}"></a> <span class="pill good" th:if="${x.leader}">leader</span></td>
+                        <td class="num muted" th:text="${x.stocks}"></td>
+                        <td class="num" th:style="${@fmt.heat(x.ret20Pct, 10)}" th:text="${@fmt.pct(x.ret20Pct)}"></td>
+                        <td class="num" th:style="${@fmt.heat(x.ret60Pct, 15)}"><b th:text="${@fmt.pct(x.ret60Pct)}"></b></td>
+                        <td class="num" th:style="${@fmt.heat(x.ret120Pct, 20)}" th:text="${@fmt.pct(x.ret120Pct)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.above50Pct, 0)} + '%'"></td>
+                        <td class="num" th:text="${x.newHighs}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const chart = /*[[${chart}]]*/ {};
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                Chart.defaults.color = css.getPropertyValue('--muted').trim();
+                Chart.defaults.borderColor = css.getPropertyValue('--border').trim();
+                const accent = css.getPropertyValue('--accent').trim(), warn = css.getPropertyValue('--warn').trim(), muted = css.getPropertyValue('--muted').trim();
+                new Chart(document.getElementById('regimeChart'), {
+                    type: 'line',
+                    data: { labels: chart.dates, datasets: [
+                        { label: 'Market', data: chart.index, borderColor: accent, borderWidth: 2.5, pointRadius: 0, tension: 0.1 },
+                        { label: '50-session average', data: chart.ma50, borderColor: warn, borderWidth: 1.5, pointRadius: 0, spanGaps: false },
+                        { label: '200-session average', data: chart.ma200, borderColor: muted, borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, spanGaps: false }] },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
+                });
+                new Chart(document.getElementById('breadthChart'), {
+                    data: { labels: chart.dates, datasets: [
+                        { type: 'line', label: '% above 50-session average', data: chart.breadth, borderColor: accent, borderWidth: 2, pointRadius: 0, yAxisID: 'b' },
+                        { type: 'bar', label: 'Turnover (Rs crore, 20-session avg)', data: chart.turnover, backgroundColor: 'rgba(138,147,163,0.35)', yAxisID: 't' }] },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { b: { position: 'left', min: 0, max: 100 }, t: { position: 'right', grid: { display: false } } } }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

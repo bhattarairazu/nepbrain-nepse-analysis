@@ -8,40 +8,81 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
     <script th:src="@{/js/stock-popover.js}" defer></script>
     <script th:src="@{/js/search.js}" defer></script>
+    <script th:src="@{/js/nav.js}" defer></script>
 </head>
 <body>
 
-<header th:fragment="nav" class="topbar">
+<header th:fragment="nav" class="topbar" th:with="a=${active != null ? active : ''}">
     <a class="brand" th:href="@{/signals}">
         <span class="logo" aria-hidden="true">▲</span>
         <span><b>NEPSE Top Turnover</b><small>Top 20 turnover &amp; volume analysis</small></span>
     </a>
-    <nav>
-        <a th:href="@{/signals}" th:classappend="${active == 'signals'} ? 'on'">▶ Signals</a>
-        <a th:href="@{/top5}" th:classappend="${active == 'top5'} ? 'on'">◆ Top 5</a>
-        <a th:href="@{/my-list}" th:classappend="${active == 'mylist'} ? 'on'">★ My list</a>
-        <a th:href="@{/watchlist}" th:classappend="${active == 'watchlist'} ? 'on'">Signal watchlist</a>
-        <a th:href="@{/ideas}" th:classappend="${active == 'ideas'} ? 'on'">Ideas</a>
-        <a th:href="@{/patterns}" th:classappend="${active == 'patterns'} ? 'on'">Patterns</a>
-        <a th:href="@{/sectors}" th:classappend="${active == 'sectors'} ? 'on'">Sectors</a>
-        <a th:href="@{/trade-size}" th:classappend="${active == 'tradesize'} ? 'on'">Trade size</a>
-        <a th:href="@{/}" th:classappend="${active == 'day'} ? 'on'">Daily lists</a>
-        <a th:href="@{/money-flow}" th:classappend="${active == 'flow'} ? 'on'">Money flow</a>
-        <a th:href="@{/market}" th:classappend="${active == 'market'} ? 'on'">Market</a>
-        <a th:href="@{/brokers}" th:classappend="${active == 'brokers'} ? 'on'">Brokers</a>
-        <a th:href="@{/players}" th:classappend="${active == 'players'} ? 'on'">Big players</a>
-        <a th:href="@{/bases}" th:classappend="${active == 'bases'} ? 'on'">Sideways bases</a>
-        <a th:href="@{/moves}" th:classappend="${active == 'moves'} ? 'on'">Move study</a>
-        <a th:href="@{/pullback}" th:classappend="${active == 'pullback'} ? 'on'">Breakout pullback</a>
-        <a th:href="@{/lab}" th:classappend="${active == 'lab'} ? 'on'">Strategy lab</a>
-        <a th:href="@{/backtest}" th:classappend="${active == 'backtest'} ? 'on'">Backtest</a>
-        <a th:href="@{/journal}" th:classappend="${active == 'journal'} ? 'on'">Journal</a>
-        <a th:href="@{/crawl}" th:classappend="${active == 'crawl'} ? 'on'">Data</a>
+    <button class="menu-btn" type="button" aria-expanded="false" aria-controls="main-nav">
+        <span aria-hidden="true">☰</span> Menu<span class="badge" th:if="${notesDue != null and notesDue > 0}" th:text="${notesDue}"></span>
+    </button>
+    <nav id="main-nav" class="main-nav" aria-label="Main">
+        <div class="nav-group" th:classappend="${#lists.contains({'signals','top5','day','market','flow'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">Today</button>
+            <div class="nav-panel">
+                <a th:href="@{/signals}" th:classappend="${a == 'signals'} ? 'on'">▶ Signals</a>
+                <a th:href="@{/top5}" th:classappend="${a == 'top5'} ? 'on'">◆ Top 5</a>
+                <a th:href="@{/}" th:classappend="${a == 'day'} ? 'on'">Daily lists</a>
+                <a th:href="@{/market}" th:classappend="${a == 'market'} ? 'on'">Market</a>
+                <a th:href="@{/money-flow}" th:classappend="${a == 'flow'} ? 'on'">Money flow</a>
+            </div>
+        </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'mylist','notes','watchlist','journal'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">My trading<span class="badge" th:if="${notesDue != null and notesDue > 0}" th:text="${notesDue}"></span></button>
+            <div class="nav-panel">
+                <a th:href="@{/my-list}" th:classappend="${a == 'mylist'} ? 'on'">★ My list</a>
+                <a th:href="@{/notes}" th:classappend="${a == 'notes'} ? 'on'">Notes<span class="badge" th:if="${notesDue != null and notesDue > 0}" th:text="${notesDue} + ' due'"></span></a>
+                <a th:href="@{/watchlist}" th:classappend="${a == 'watchlist'} ? 'on'">Signal watchlist</a>
+                <a th:href="@{/journal}" th:classappend="${a == 'journal'} ? 'on'">Journal</a>
+            </div>
+        </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'regime','leaders','sectors'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">Long term</button>
+            <div class="nav-panel">
+                <a th:href="@{/regime}" th:classappend="${a == 'regime'} ? 'on'">Bull run checklist</a>
+                <a th:href="@{/leaders}" th:classappend="${a == 'leaders'} ? 'on'">Long-term leaders</a>
+                <a th:href="@{/sectors}" th:classappend="${a == 'sectors'} ? 'on'">Sectors</a>
+            </div>
+        </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'players','brokers','bases','pullback','moves','ideas','patterns','tradesize'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">Studies</button>
+            <div class="nav-panel">
+                <a th:href="@{/players}" th:classappend="${a == 'players'} ? 'on'">Big players</a>
+                <a th:href="@{/brokers}" th:classappend="${a == 'brokers'} ? 'on'">Brokers</a>
+                <a th:href="@{/bases}" th:classappend="${a == 'bases'} ? 'on'">Sideways bases</a>
+                <a th:href="@{/pullback}" th:classappend="${a == 'pullback'} ? 'on'">Breakout pullback</a>
+                <a th:href="@{/moves}" th:classappend="${a == 'moves'} ? 'on'">Move study</a>
+                <a th:href="@{/ideas}" th:classappend="${a == 'ideas'} ? 'on'">Ideas</a>
+                <a th:href="@{/patterns}" th:classappend="${a == 'patterns'} ? 'on'">Patterns</a>
+                <a th:href="@{/trade-size}" th:classappend="${a == 'tradesize'} ? 'on'">Trade size</a>
+            </div>
+        </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'lab','backtest'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">Backtests</button>
+            <div class="nav-panel">
+                <a th:href="@{/lab}" th:classappend="${a == 'lab'} ? 'on'">Strategy lab</a>
+                <a th:href="@{/backtest}" th:classappend="${a == 'backtest'} ? 'on'">Backtest</a>
+            </div>
+        </div>
+        <a class="nav-top" th:href="@{/crawl}" th:classappend="${a == 'crawl'} ? 'on'">Data</a>
     </nav>
     <form class="nav-search" method="get" th:action="@{/search}" role="search" th:attr="data-symbols=@{/api/symbols}">
         <input name="q" list="nav-symbols" placeholder="Find or open a stock…" autocomplete="off" aria-label="Search a stock by symbol or name" required>
         <datalist id="nav-symbols"></datalist>
     </form>
+
+    <!-- phones: the pages used most, always one tap away -->
+    <nav class="bottom-bar" aria-label="Quick">
+        <a th:href="@{/top5}" th:classappend="${a == 'top5'} ? 'on'"><span aria-hidden="true">◆</span>Top 5</a>
+        <a th:href="@{/my-list}" th:classappend="${a == 'mylist'} ? 'on'"><span aria-hidden="true">★</span>My list</a>
+        <a th:href="@{/notes}" th:classappend="${a == 'notes'} ? 'on'"><span aria-hidden="true">✎</span>Notes<span class="badge" th:if="${notesDue != null and notesDue > 0}" th:text="${notesDue}"></span></a>
+        <a th:href="@{/signals}" th:classappend="${a == 'signals'} ? 'on'"><span aria-hidden="true">▶</span>Signals</a>
+        <button type="button" class="bottom-search"><span aria-hidden="true">⌕</span>Search</button>
+    </nav>
 </header>
 
 <form th:fragment="sessionPicker(path, current)" class="inline" method="get" th:action="@{${path}}" th:if="${sessions != null and !sessions.isEmpty()}">

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!-- One note as a card; back = the page to return to after an action -->
+<article th:fragment="card(v, back)" class="card note-card" th:with="n=${v.note}"
+         th:classappend="${v.overdue} ? 'overdue' : (${v.due} ? 'due' : '')">
+    <div class="note-head">
+        <div>
+            <span class="pill" th:classappend="${n.status == 'DONE'} ? 'good' : (${v.overdue} ? 'bad' : (${v.due} ? 'warn' : ''))"
+                  th:text="${n.status == 'DONE'} ? 'Done' : (${v.overdue} ? 'Overdue' : (${v.due} ? 'Today' : 'Upcoming'))"></span>
+            <b th:text="${@fmt.day(n.forDate)}"></b>
+            <a th:if="${n.symbol != null}" class="note-sym" th:href="@{/stock/{x}(x=${n.symbol})}" th:text="${n.symbol}"></a>
+        </div>
+        <span class="small muted" th:if="${v.total > 0}" th:text="${v.met} + ' of ' + ${v.total} + ' met'"
+              th:classappend="${v.allMet()} ? 'pos' : ''"></span>
+    </div>
+    <h3 class="note-title" th:text="${n.title}"></h3>
+    <div class="note-body" th:if="${n.body != null}" th:text="${n.body}"></div>
+
+    <ul class="conditions" th:unless="${v.conditions.isEmpty()}">
+        <li th:each="cv : ${v.conditions}" th:with="c=${cv.c}">
+            <form th:if="${c.kind == 'MANUAL'}" method="post" th:action="@{/notes/condition/{id}(id=${c.id})}" class="cond-form">
+                <input type="hidden" name="back" th:value="${back}">
+                <input type="hidden" name="checked" th:value="${!c.checked}">
+                <button type="submit" class="tick" th:classappend="${c.checked} ? 'on' : ''" th:title="${c.checked} ? 'Untick' : 'Tick'"
+                        th:text="${c.checked} ? '✓' : ''" th:attr="aria-label=${c.checked} ? 'Untick' : 'Tick'"></button>
+                <span th:text="${c.text}" th:classappend="${c.checked} ? 'muted' : ''"></span>
+            </form>
+            <div th:if="${c.kind == 'PRICE'}" class="cond-form">
+                <span class="tick auto" th:classappend="${cv.met == null} ? '' : (${cv.met} ? 'on' : 'off')"
+                      th:text="${cv.met == null} ? '?' : (${cv.met} ? '✓' : '✗')" title="checked automatically from stored prices"></span>
+                <span><span th:text="${c.text}"></span> <small class="muted" style="display:block" th:text="'auto: ' + ${cv.detail}"></small></span>
+            </div>
+        </li>
+    </ul>
+
+    <p class="small" th:if="${n.decision != null}"><b>Decision:</b> <span th:text="${n.decision}"></span></p>
+
+    <div class="note-actions">
+        <form th:if="${n.status == 'OPEN'}" method="post" th:action="@{/notes/{id}/done(id=${n.id})}" class="done-form">
+            <input type="hidden" name="back" th:value="${back}">
+            <input name="decision" placeholder="What did you decide? (optional)" maxlength="500">
+            <button class="btn sm primary" type="submit">Done</button>
+        </form>
+        <form th:if="${n.status == 'DONE'}" method="post" th:action="@{/notes/{id}/reopen(id=${n.id})}" style="display:inline">
+            <input type="hidden" name="back" th:value="${back}">
+            <button class="btn sm" type="submit">Reopen</button>
+        </form>
+        <details class="edit">
+            <summary class="btn sm">Edit</summary>
+            <form method="post" th:action="@{/notes/{id}/save(id=${n.id})}" class="note-form">
+                <input type="hidden" name="back" th:value="${back}">
+                <label>For <input type="date" name="forDate" th:value="${n.forDate}"></label>
+                <label>Stock <input name="symbol" list="nav-symbols" th:value="${n.symbol}" autocomplete="off"></label>
+                <label class="wide">Title <input name="title" required maxlength="200" th:value="${n.title}"></label>
+                <label class="wide">Note <textarea name="body" rows="4" th:text="${n.body}"></textarea></label>
+                <label class="wide">Conditions, one per line <textarea name="conditions" rows="4"
+                    th:text="${T(com.nepse.topturnover.notes.NotesService).conditionsText(n)}"></textarea></label>
+                <button class="btn sm primary" type="submit">Save</button>
+            </form>
+        </details>
+        <form method="post" th:action="@{/notes/{id}/delete(id=${n.id})}" style="display:inline"
+              th:attr="data-confirm='Delete the note “' + ${n.title} + '”?'" onsubmit="return confirm(this.dataset.confirm)">
+            <input type="hidden" name="back" th:value="${back}">
+            <button class="btn sm" type="submit">Delete</button>
+        </form>
+    </div>
+</article>
+
+<!-- The add form; symbol = prefilled stock (or null), back = page to return to -->
+<form th:fragment="add(symbol, nextSession, back)" method="post" th:action="@{/notes/add}" class="note-form">
+    <input type="hidden" name="back" th:value="${back}">
+    <label>For <input type="date" name="forDate" th:value="${nextSession}"></label>
+    <label>Stock (optional) <input name="symbol" list="nav-symbols" th:value="${symbol}" autocomplete="off" placeholder="e.g. NABIL"></label>
+    <label class="wide">Title <input name="title" required maxlength="200" placeholder="e.g. Buy NABIL if it holds the breakout"></label>
+    <label class="wide">Note <textarea name="body" rows="3" placeholder="What you see, why, what would change your mind"></textarea></label>
+    <label class="wide">Conditions, one per line
+        <textarea name="conditions" rows="3" placeholder="NABIL close >= 560&#10;API turnover > 5 cr&#10;Check the broker page first"></textarea>
+        <small class="muted">Lines like <code>NABIL close &gt;= 560</code>, <code>NABIL above 560</code>, <code>API turnover &gt; 5 cr</code>,
+            <code>SHL volume &gt;= 50k</code>, <code>NABIL change &gt;= 2%</code> (or just <code>close above 560</code> when the note has a stock)
+            are checked automatically against each new session. Anything else becomes a tick box.</small>
+    </label>
+    <button class="btn primary" type="submit">Save note</button>
+</form>
+
+</body>
+</html>

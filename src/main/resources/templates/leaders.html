@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Long-term leaders')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Long-term leaders</h1>
+            <p>Candidates to lead a bull run, from price and volume: relative strength over 3, 6 and 12 months (ranked 1–99 against every liquid stock),
+                distance from the 52-week high, the 30-week trend on weekly bars, a 26-week base and its breakout, 3-month accumulation, sector leadership
+                and broker buying. Liquid ordinary shares only (Rs 50 lakh+ a day on average); prices are bonus/right adjusted.</p>
+        </div>
+        <a class="btn" th:href="@{/regime}">← Bull run checklist</a>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 6 months). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note">
+            <b>Before you use it.</b> This finds stocks the market is already favouring; it knows nothing about earnings, book value or debt, which decide whether a
+            leader becomes a multibagger or falls back. Check those in the company's quarterly reports before buying.
+            <span th:if="${r.regimeVerdict != null}">The market right now: <a th:href="@{/regime}"><span class="pill" th:classappend="${r.regimeTone}" th:text="${r.regimeVerdict}"></span></a>.
+                Leaders matter most once a bull run is confirmed.</span>
+            For long-term holding, sell on a trend break (for example a weekly close under the 30-week average) rather than a fixed target; holding over a year
+            cuts capital gains tax from 7.5% to 5%.
+        </div>
+
+        <div class="tiles">
+            <div class="card tile" th:each="g, st : ${ {r.leaders, r.emerging, r.basing} }">
+                <div class="k" th:text="${stages[st.index].title}"></div><div class="v" th:text="${g.size()}"></div>
+                <div class="s" th:text="'of ' + ${r.eligible} + ' liquid stocks'"></div></div>
+        </div>
+
+        <section class="card block">
+            <h2 th:text="'Top 30 at the close of ' + ${@fmt.day(r.lastDay)}"></h2>
+            <p class="sub">Score (100): relative strength rank × 0.35, near the 52-week high 15, above a rising 30-week average 15, 26-week base breakout 15 (near its top 8),
+                3-month accumulation 10, leading sector 5, brokers accumulating 5. Stages:
+                <span th:each="s : ${stages}" th:unless="${s.rule.isEmpty()}"><b th:text="${s.title}"></b> = <span th:text="${s.rule}"></span>. </span></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Stock</th><th>Stage</th><th class="num">Score</th><th class="num">RS rank</th><th class="num">3 months</th><th class="num">6 months</th>
+                        <th class="num">12 months</th><th class="num">From 52w high</th><th class="num">30-week avg</th><th class="num">26-week base</th>
+                        <th class="num">Up/down vol</th><th>Why</th><th></th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.top}">
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${x.symbol})}" th:text="${x.symbol}"></a><small th:text="${x.sector}"></small></td>
+                        <td><span class="pill" th:classappend="${x.stage.tone}" th:text="${x.stage.title}"></span></td>
+                        <td class="num" th:style="${@fmt.shade(x.score / 100.0, 1)}"><b th:text="${x.score}"></b></td>
+                        <td class="num" th:text="${x.rsRank}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.ret3Pct)}" th:text="${@fmt.pct(x.ret3Pct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.ret6Pct)}" th:text="${@fmt.pct(x.ret6Pct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.ret12Pct)}" th:text="${x.ret12Pct != null} ? ${@fmt.pct(x.ret12Pct)} : '—'"></td>
+                        <td class="num" th:text="${@fmt.pct(x.fromHighPct)} + (${x.fullYear} ? '' : '*')" th:title="${x.fullYear} ? '' : 'less than a year of history: high of the stored period'"></td>
+                        <td class="num small" th:text="${@fmt.price(x.weekMa30)} + (${x.maRising} ? ' ↑' : ' →')"></td>
+                        <td class="num small" th:text="${x.baseDepthPct != null} ? ${@fmt.decimal(x.baseDepthPct, 0)} + '% deep' + (${x.baseBreakout} ? ', broken out' : '') : '—'"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.upDownVolume, 2)}"></td>
+                        <td class="small" style="white-space:normal;min-width:260px" th:text="${#strings.listJoin(x.reasons, ' · ')}"></td>
+                        <td>
+                            <form method="post" th:action="@{/my-list/add}" style="display:inline">
+                                <input type="hidden" name="symbol" th:value="${x.symbol}">
+                                <input type="hidden" name="note" th:value="'Long-term ' + ${x.stage.title.toLowerCase()} + ', score ' + ${x.score} + ', RS ' + ${x.rsRank} + ' (' + ${r.lastDay} + ')'">
+                                <input type="hidden" name="back" value="/leaders">
+                                <button class="btn sm" type="submit">+ My list</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small muted">* less than a year of stored history: the high is that of the stored period.</p>
+        </section>
+
+        <section class="card block">
+            <h2>Did strong stocks stay strong?</h2>
+            <p class="sub" th:text="'A limited check, not a backtest: every 5 sessions, liquid stocks were ranked by their 6-month return, then their next 60 sessions were measured ('
+                + ${r.persistenceDays} + ' ranking days; before charges). With about a year of history this covers one, mostly falling, market. '
+                + 'If the strongest group did best, leadership tended to persist.'"></p>
+            <p th:if="${r.persistenceDays == 0}" class="muted">Not enough history yet: needs about 185 sessions.</p>
+            <div class="table-wrap" th:unless="${r.persistenceDays == 0}">
+                <table>
+                    <thead><tr><th>Group (by 6-month return)</th><th class="num">Observations</th><th class="num">Next 60 sessions: avg</th><th class="num">median</th>
+                        <th class="num">Beat the market</th></tr></thead>
+                    <tbody>
+                    <tr th:each="q : ${r.persistence}">
+                        <td th:text="${q.label}"></td>
+                        <td class="num muted" th:text="${@fmt.count(q.observations)}"></td>
+                        <td class="num" th:style="${@fmt.heat(q.avgForwardPct, 10)}"><b th:text="${@fmt.pct(q.avgForwardPct)}"></b></td>
+                        <td class="num muted" th:text="${@fmt.pct(q.medianForwardPct)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(q.beatMarketPct, 0)} + '%'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
