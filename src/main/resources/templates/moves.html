@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Move study')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Move study</h1>
+            <p>Which stock-days were followed by a tradeable <b th:text="'+' + ${@fmt.decimal(target, 0)} + '%'"></b> move, and what did they have in common?
+                A move means: buy at the next open, the high reaches the target within <b th:text="${window}"></b> sessions (selling only from T+3),
+                before a close <b th:text="${@fmt.decimal(stop, 0)} + '%'"></b> below the entry. Liquid ordinary shares only (Rs 1 Cr+ traded that day),
+                bonus/right adjusted prices. Averages are after 0.8% round-trip charges, before tax.</p>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 120 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note" th:text="${r.sessions} + ' sessions: ' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}
+             + '. Patterns are measured on the design period (until ' + ${@fmt.day(r.split)} + ', ' + ${@fmt.count(r.designDays)}
+             + ' stock-days) and checked on the rest (' + ${@fmt.count(r.oosDays)} + ' stock-days), which the patterns never saw.'"></div>
+
+        <div class="tiles">
+            <div class="card tile"><div class="k">Base rate · design</div>
+                <div class="v" th:text="${@fmt.decimal(r.designBase.hitPct, 1)} + '%'"></div>
+                <div class="s" th:text="'of stock-days led to a move · avg trade ' + ${@fmt.pct(r.designBase.avgPct)}"></div></div>
+            <div class="card tile"><div class="k">Base rate · out-of-sample</div>
+                <div class="v" th:text="${@fmt.decimal(r.oosBase.hitPct, 1)} + '%'"></div>
+                <div class="s" th:text="'avg trade ' + ${@fmt.pct(r.oosBase.avgPct)}"></div></div>
+            <div class="card tile"><div class="k">Features that held up</div>
+                <div class="v" th:text="${#lists.size(r.lifts.?[held])} + ' / ' + ${#lists.size(r.lifts)}"></div>
+                <div class="s">best design bucket still above the base rate later</div></div>
+        </div>
+
+        <section class="card block">
+            <h2>Rules built from the patterns</h2>
+            <p class="sub">Every qualifying stock-day counted as a trade. "Days" is how many different sessions produced signals: few days means the result rests on a handful of market moments.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Rule</th><th class="num">Design: trades</th><th class="num">days</th><th class="num">hit</th><th class="num">avg</th>
+                        <th class="num">Out-of-sample: trades</th><th class="num">days</th><th class="num">hit</th><th class="num">avg</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rules}">
+                        <td style="white-space:normal;min-width:260px"><b th:text="${x.name}"></b><br><small class="muted" th:text="${x.rule}"></small></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num muted" th:text="${x.design.days}"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.design.hitPct, 1)} + '%'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${@fmt.pct(x.design.avgPct)}"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num muted" th:text="${x.oos.days}"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.oos.hitPct, 1)} + '%'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${@fmt.pct(x.oos.avgPct)}"></b></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Rare-trade accounts</h2>
+            <p class="sub" th:text="'Rs ' + ${@fmt.count(T(com.nepse.topturnover.analysis.StrategyLabService).CAPITAL)}
+                + ', the whole account in one trade at a time, NEPSE charges and 7.5% capital gains tax, T+2. Lift-score threshold: '
+                + ${@fmt.decimal(r.scoreThreshold, 2)} + '. With this few trades, one or two results decide everything: treat them as anecdotes, not proof.'"></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Account</th><th class="num">Final value</th><th class="num">Return</th><th class="num">Design</th><th class="num">Out-of-sample</th>
+                        <th class="num">Trades (design · oos)</th><th class="num">Winners</th><th class="num">Charges + tax</th></tr></thead>
+                    <tbody>
+                    <tr th:each="a : ${r.accounts}">
+                        <td style="white-space:normal;min-width:300px"><b th:text="${a.title}"></b><br><small class="muted" th:text="${a.rule}"></small></td>
+                        <td class="num"><b th:text="'Rs ' + ${@fmt.count(a.finalValue)}"></b></td>
+                        <td class="num" th:style="${@fmt.heat(a.returnPct, 20)}"><b th:text="${@fmt.pct(a.returnPct)}"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(a.designReturnPct)}" th:text="${@fmt.pct(a.designReturnPct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(a.oosReturnPct)}" th:text="${@fmt.pct(a.oosReturnPct)}"></td>
+                        <td class="num" th:text="${a.designTrades} + ' · ' + ${a.oosTrades}"></td>
+                        <td class="num" th:text="${#lists.isEmpty(a.trades)} ? '—' : ${@fmt.decimal(a.winRate, 0)} + '%'"></td>
+                        <td class="num muted" th:text="'Rs ' + ${@fmt.count(a.charges + a.tax)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="grid-2" style="margin-top:14px">
+                <div th:each="a : ${r.accounts}">
+                    <h4 th:text="${a.title}"></h4>
+                    <p th:if="${#lists.isEmpty(a.trades)}" class="muted">No trades.</p>
+                    <table th:unless="${#lists.isEmpty(a.trades)}">
+                        <thead><tr><th>Stock</th><th>Signal</th><th>Sold</th><th class="num">Days</th><th class="num">Net</th><th>Exit</th><th>Period</th></tr></thead>
+                        <tbody>
+                        <tr th:each="p : ${a.trades}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${p.symbol})}" th:text="${p.symbol}"></a><small th:text="${p.sector}"></small></td>
+                            <td th:text="${p.signal}"></td>
+                            <td th:text="${p.exitDate}"></td>
+                            <td class="num" th:text="${p.held}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(p.netPct)}" th:text="${@fmt.pct(p.netPct)}"></td>
+                            <td class="small muted" th:text="${p.reason}"></td>
+                            <td><span class="pill" th:classappend="${p.design} ? '' : 'warn'" th:text="${p.design} ? 'design' : 'out-of-sample'"></span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2 th:text="'Best setups at the close of ' + ${@fmt.day(r.lastDay)}"></h2>
+            <p class="sub">Ranked by lift score. "Qualifies" means the score clears the threshold; it is a watchlist, not a recommendation, since the score did not hold up out-of-sample.</p>
+            <p th:if="${#lists.isEmpty(r.candidates)}" class="muted">No liquid stocks on the latest session.</p>
+            <table th:unless="${#lists.isEmpty(r.candidates)}">
+                <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Score</th><th></th><th>Why</th></tr></thead>
+                <tbody>
+                <tr th:each="c : ${r.candidates}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${c.symbol})}" th:text="${c.symbol}"></a><small th:text="${c.sector}"></small></td>
+                    <td class="num" th:text="${@fmt.price(c.close)}"></td>
+                    <td class="num" th:text="${@fmt.decimal(c.score, 2)}"></td>
+                    <td><span class="pill good" th:if="${c.qualifies}">Qualifies</span></td>
+                    <td class="small muted" th:text="${#strings.listJoin(c.notes, ' · ')}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card block">
+            <h2>Feature lifts</h2>
+            <p class="sub">Each feature split into five equal-sized groups using design-period values. Lift = the group's move rate ÷ the base rate.
+                The out-of-sample columns use the same groups. <span class="pill good">held</span> means the best design group still beat the base rate later;
+                <span class="pill">score</span> marks the features used in the lift score.</p>
+            <div class="journal-groups">
+                <div th:each="l : ${r.lifts}">
+                    <h4><span th:text="${l.feature.title}"></span>
+                        <span class="pill" th:if="${l.inScore}">score</span>
+                        <span class="pill" th:classappend="${l.held} ? 'good' : 'bad'" th:text="${l.held} ? 'held' : 'faded'"></span></h4>
+                    <small class="muted" th:text="${l.feature.help}"></small>
+                    <table>
+                        <thead><tr><th>Group</th><th class="num">Design n</th><th class="num">Move rate</th><th class="num">Lift</th><th class="num">Later rate</th><th class="num">Later lift</th></tr></thead>
+                        <tbody>
+                        <tr th:each="b : ${l.buckets}">
+                            <td th:text="${b.range}"></td>
+                            <td class="num muted" th:text="${@fmt.count(b.designN)}"></td>
+                            <td class="num" th:text="${@fmt.decimal(b.designHitPct, 1)} + '%'"></td>
+                            <td class="num" th:style="${@fmt.heat(b.lift - 1, 0.5)}" th:text="${@fmt.ratio(b.lift)}"></td>
+                            <td class="num" th:text="${b.oosN > 0} ? ${@fmt.decimal(b.oosHitPct, 1)} + '%' : '—'"></td>
+                            <td class="num" th:style="${b.oosN > 0} ? ${@fmt.heat(b.oosLift - 1, 0.5)} : ''" th:text="${b.oosN > 0} ? ${@fmt.ratio(b.oosLift)} : '—'"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Stocks that moved most often</h2>
+            <p class="sub">Number of liquid stock-days followed by a move, over the whole period.</p>
+            <table>
+                <thead><tr><th>Stock</th><th class="num">Moves</th><th class="num">Liquid days</th><th class="num">Move rate</th></tr></thead>
+                <tbody>
+                <tr th:each="x : ${r.movers}">
+                    <td class="sym"><a th:href="@{/stock/{s}(s=${x.symbol})}" th:text="${x.symbol}"></a><small th:text="${x.sector}"></small></td>
+                    <td class="num" th:text="${x.moves}"></td>
+                    <td class="num muted" th:text="${x.days}"></td>
+                    <td class="num" th:text="${@fmt.decimal(x.hitPct, 0)} + '%'"></td>
+                </tr>
+                </tbody>
+            </table>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
