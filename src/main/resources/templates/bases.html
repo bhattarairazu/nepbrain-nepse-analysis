@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Sideways bases')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Sideways bases</h1>
+            <p>Stocks that moved sideways for the last 30 sessions (high-to-low range ≤ 15%, net drift ≤ 8%, Rs 50 lakh+ average turnover)
+                and where they stand now. The score (0–100) adds up a tight base, a Bollinger squeeze, accumulation (more volume on up days than down days),
+                a close near the top of the base, volume drying up, and rising turnover. Prices are bonus/right adjusted.</p>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 120 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note">
+            <b>Phases.</b>
+            <span th:each="p : ${phases}"><br><b th:text="${p.title}"></b>: <span th:text="${p.help}"></span>.</span>
+        </div>
+
+        <th:block th:each="g : ${ {r.breaking, r.ready, r.forming} }" th:with="idx=${gStat.index}">
+            <section class="card block">
+                <h2><span th:text="${phases[idx].title} + ' at the close of ' + ${@fmt.day(r.lastDay)}"></span>
+                    <span class="muted small" th:text="${g.size()}"></span></h2>
+                <p class="sub" th:if="${idx == 2}">Top 40 by score.</p>
+                <p th:if="${g.isEmpty()}" class="muted">None today.</p>
+                <div class="table-wrap" th:unless="${g.isEmpty()}">
+                    <table>
+                        <thead><tr><th>Stock</th><th class="num">Score</th><th class="num">Close</th><th class="num">Base low → high</th><th class="num">Range</th>
+                            <th class="num">To high</th><th class="num">Squeeze</th><th class="num">Up/down vol</th><th class="num">Vol today</th>
+                            <th class="num">Vol 10d</th><th class="num">Turnover today</th><th class="num">Avg turnover</th><th>Why</th></tr></thead>
+                        <tbody>
+                        <tr th:each="b : ${g}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${b.symbol})}" th:text="${b.symbol}"></a><small th:text="${b.sector}"></small></td>
+                            <td class="num" th:style="${@fmt.shade(b.score / 100.0, 1)}"><b th:text="${b.score}"></b></td>
+                            <td class="num" th:text="${@fmt.price(b.close)}"></td>
+                            <td class="num small" th:text="${@fmt.price(b.baseLow)} + ' → ' + ${@fmt.price(b.baseHigh)}"></td>
+                            <td class="num" th:text="${@fmt.decimal(b.depthPct, 1)} + '%'"></td>
+                            <td class="num" th:classappend="${@fmt.tone(b.toHighPct)}" th:text="${@fmt.pct(b.toHighPct)}"></td>
+                            <td class="num" th:text="${@fmt.decimal(b.squeezePct, 0)} + '%'" title="today's band width vs the last 100 sessions: 0% = narrowest"></td>
+                            <td class="num" th:classappend="${b.upDownVolume >= 1.2} ? 'pos' : (${b.upDownVolume < 1} ? 'neg' : '')" th:text="${@fmt.decimal(b.upDownVolume, 2)}"></td>
+                            <td class="num" th:text="${@fmt.ratio(b.rvol)}" title="today's volume ÷ 30-session average"></td>
+                            <td class="num" th:text="${@fmt.ratio(b.dryUp)}" title="last 10 sessions' volume ÷ 30-session average"></td>
+                            <td class="num" th:text="${@fmt.money(b.turnover)}"></td>
+                            <td class="num muted" th:text="${@fmt.money(b.avgTurnover)}"></td>
+                            <td class="small" style="white-space:normal;min-width:240px" th:text="${#strings.listJoin(b.reasons, ' · ')}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </th:block>
+
+        <section class="card block">
+            <h2>Did these setups pay in the past?</h2>
+            <p class="sub" th:text="'Same rules, fixed in advance, run over ' + ${r.sessions} + ' sessions (' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}
+                + '). Buy at the next open, T+2 settlement, 0.8% round-trip charges, before tax. Design period until ' + ${@fmt.day(r.split)} + ', the rest out-of-sample.'"></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Setup</th><th>Exit</th><th class="num">Design: trades</th><th class="num">hit</th><th class="num">avg</th><th class="num">median</th>
+                        <th class="num">Out-of-sample: trades</th><th class="num">hit</th><th class="num">avg</th><th class="num">median</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rows}">
+                        <td style="white-space:normal;min-width:260px"><b th:text="${x.name}"></b><br><small class="muted" th:text="${x.rule}"></small></td>
+                        <td class="small" th:text="${x.exit.title}"></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num" th:text="${x.design.n > 0} ? ${@fmt.decimal(x.design.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${x.design.n > 0} ? ${@fmt.pct(x.design.avgPct)} : '—'"></td>
+                        <td class="num muted" th:text="${x.design.n > 0} ? ${@fmt.pct(x.design.medianPct)} : '—'"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.avgPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.medianPct)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Past signals (newest first)</h2>
+            <p class="sub">Base breakouts and coiling setups with the +7% / −5% / 10-session exit.</p>
+            <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+                <table>
+                    <thead><tr><th>Stock</th><th>Signal</th><th>Setup</th><th class="num">Score</th><th class="num">Base range</th><th class="num">Volume</th>
+                        <th>Bought</th><th>Sold</th><th class="num">Net</th><th>Why sold</th></tr></thead>
+                    <tbody>
+                    <tr th:each="e : ${r.recent}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${e.symbol})}" th:text="${e.symbol}"></a><small th:text="${e.sector}"></small></td>
+                        <td th:text="${e.signal}"></td>
+                        <td class="small" th:text="${e.kind}"></td>
+                        <td class="num" th:text="${e.score}"></td>
+                        <td class="num" th:text="${@fmt.decimal(e.baseDepthPct, 1)} + '%'"></td>
+                        <td class="num" th:text="${@fmt.ratio(e.rvol)}"></td>
+                        <td class="small" th:text="${e.entryDate}"></td>
+                        <td class="small" th:text="${e.exitDate}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(e.netPct)}" th:text="${@fmt.pct(e.netPct)}"></td>
+                        <td class="small muted"><span th:text="${e.reason}"></span> <span class="pill warn" th:unless="${e.design}">oos</span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

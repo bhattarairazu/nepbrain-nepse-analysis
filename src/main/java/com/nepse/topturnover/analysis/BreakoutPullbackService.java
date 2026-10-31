@@ -102,7 +102,7 @@ public class BreakoutPullbackService {
     }
 
     /** What a trade from the open after signal day i did. */
-    private record Outcome(int entryI, double entry, int exitI, double exit, boolean hit, String reason, double ret) {}
+    record Outcome(int entryI, double entry, int exitI, double exit, boolean hit, String reason, double ret) {}
 
     private final BacktestService backtest;
     private final TradeCosts costs;
@@ -223,7 +223,7 @@ public class BreakoutPullbackService {
     }
 
     /** Buy at the open after day i; target sells from T+3, a close below the stop (from T+2's close) sells at the next open, else the last close. */
-    private static Outcome outcome(Series s, int i, Exit x) {
+    static Outcome outcome(Series s, int i, Exit x) {
         int e = i + 1, n = s.size();
         if (e + x.window >= n || !(s.open[e] > 0)) return null;
         double entry = s.open[e];

@@ -312,3 +312,8 @@ td.why span::before { content: "• "; }
 .mistakes label { flex-direction: row !important; align-items: center; color: var(--text) !important; font-size: 13px !important; }
 .journal-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; margin-top: 8px; }
 .journal-groups h4 { margin: 0 0 6px; }
+
+/* tables inside grid cells scroll within their cell instead of widening the page */
+.grid-2 > *, .journal-groups > *, .tiles > * { min-width: 0; }
+.grid-2 > *, .journal-groups > * { overflow-x: auto; }
+.scroll-x { overflow-x: auto; max-width: 100%; }

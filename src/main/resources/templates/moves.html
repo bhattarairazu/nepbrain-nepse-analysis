@@ -106,7 +106,7 @@
             <h2 th:text="'Best setups at the close of ' + ${@fmt.day(r.lastDay)}"></h2>
             <p class="sub">Ranked by lift score. "Qualifies" means the score clears the threshold; it is a watchlist, not a recommendation, since the score did not hold up out-of-sample.</p>
             <p th:if="${#lists.isEmpty(r.candidates)}" class="muted">No liquid stocks on the latest session.</p>
-            <table th:unless="${#lists.isEmpty(r.candidates)}">
+            <div class="scroll-x" th:unless="${#lists.isEmpty(r.candidates)}"><table>
                 <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Score</th><th></th><th>Why</th></tr></thead>
                 <tbody>
                 <tr th:each="c : ${r.candidates}">
@@ -117,7 +117,7 @@
                     <td class="small muted" th:text="${#strings.listJoin(c.notes, ' · ')}"></td>
                 </tr>
                 </tbody>
-            </table>
+            </table></div>
         </section>
 
         <section class="card block">
@@ -151,7 +151,7 @@
         <section class="card block">
             <h2>Stocks that moved most often</h2>
             <p class="sub">Number of liquid stock-days followed by a move, over the whole period.</p>
-            <table>
+            <div class="scroll-x"><table>
                 <thead><tr><th>Stock</th><th class="num">Moves</th><th class="num">Liquid days</th><th class="num">Move rate</th></tr></thead>
                 <tbody>
                 <tr th:each="x : ${r.movers}">
@@ -161,7 +161,7 @@
                     <td class="num" th:text="${@fmt.decimal(x.hitPct, 0)} + '%'"></td>
                 </tr>
                 </tbody>
-            </table>
+            </table></div>
         </section>
     </th:block>
 </main>

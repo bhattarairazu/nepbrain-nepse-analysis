@@ -99,7 +99,7 @@
         <section class="card block">
             <h2>Breakouts of the last 15 sessions</h2>
             <p th:if="${#lists.isEmpty(r.watch)}" class="muted">No breakouts recently.</p>
-            <table th:unless="${#lists.isEmpty(r.watch)}">
+            <div class="scroll-x" th:unless="${#lists.isEmpty(r.watch)}"><table>
                 <thead><tr><th>Stock</th><th>Breakout</th><th class="num">Level</th><th class="num">Volume</th><th class="num">Last close</th><th class="num">vs level</th><th>State</th></tr></thead>
                 <tbody>
                 <tr th:each="w : ${r.watch}">
@@ -112,7 +112,7 @@
                     <td class="small" th:text="${w.state}"></td>
                 </tr>
                 </tbody>
-            </table>
+            </table></div>
         </section>
 
         <section class="card block">
