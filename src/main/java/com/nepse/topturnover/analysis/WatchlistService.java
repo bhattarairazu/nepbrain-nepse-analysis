@@ -42,6 +42,8 @@ public class WatchlistService {
         RETEST_TURN("Retest + turn up", "Breakout pullback", "/pullback"),
         MOVE_SCORE("Top lift score", "Move study", "/moves"),
         WASHOUT("Washout day", "Move study", "/moves"),
+        PLAYER_QUIET("Quiet build-up", "Big players", "/players"),
+        BROKER_ACCUM("Quiet broker accumulation", "Big players", "/players"),
         MANUAL("Added by hand", "You", "/watchlist");
 
         private final String title, page, href;
@@ -96,14 +98,16 @@ public class WatchlistService {
     private final BaseBreakoutService bases;
     private final BreakoutPullbackService pullbacks;
     private final MoveStudyService moves;
+    private final BigPlayerService players;
     private final WatchlistRepository repo;
 
     public WatchlistService(BacktestService backtest, BaseBreakoutService bases, BreakoutPullbackService pullbacks, MoveStudyService moves,
-                            WatchlistRepository repo) {
+                            BigPlayerService players, WatchlistRepository repo) {
         this.backtest = backtest;
         this.bases = bases;
         this.pullbacks = pullbacks;
         this.moves = moves;
+        this.players = players;
         this.repo = repo;
     }
 
@@ -123,6 +127,7 @@ public class WatchlistService {
         bases.run().ifPresent(r -> all.addAll(r.signals()));
         pullbacks.run().ifPresent(r -> all.addAll(r.signals()));
         moves.run().ifPresent(r -> all.addAll(r.signals()));
+        players.run().ifPresent(r -> all.addAll(r.signals()));
         int added = 0;
         for (WatchSignal s : all) {
             if (repo.addIfNew(s.symbol(), s.sector(), s.source(), s.date(), s.close(), s.score(), s.detail(),
@@ -318,6 +323,9 @@ public class WatchlistService {
             if (x.name().equals("Top lift score")) bt.put(Source.MOVE_SCORE, line(x.oos().n(), x.oos().hitPct(), x.oos().avgPct()) + " on " + days(x.oos().days()));
             if (x.name().equals("Washout day")) bt.put(Source.WASHOUT, line(x.oos().n(), x.oos().hitPct(), x.oos().avgPct()) + " on " + days(x.oos().days()));
         }));
+        players.run().ifPresent(r -> r.rows().stream().filter(x -> x.exit() == Exit.SHORT && x.stage() == BigPlayerService.Stage.QUIET)
+                .forEach(x -> bt.put(Source.PLAYER_QUIET, line(x.oos().n(), x.oos().hitPct(), x.oos().avgPct()))));
+        bt.put(Source.BROKER_ACCUM, "not backtested yet: needs a few months of floorsheet history");
         return bt;
     }
 

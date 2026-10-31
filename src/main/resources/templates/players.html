@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Big players')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Big players</h1>
+            <p>Footprints of large players ("operators") in two places. <b>Price and volume</b>: orders much bigger than the stock's normal trade size,
+                turnover surges, near-circuit runs and how far the price has already gone. <b>The floorsheet</b>: a few brokers buying steadily,
+                a top buyer that turned seller, or one broker on both sides of the trades.</p>
+        </div>
+    </div>
+
+    <div class="note">
+        <b>Read this before using it.</b> A footprint is not proof of who is trading or why. A broker number carries many clients, not one person;
+        big tickets can be a mutual fund or a promoter; and the stocks operators push are the ones that later fall hardest, because they sell to
+        late buyers. The useful part is the stage: entering during <i>markup</i> or <i>pumped</i> means buying from them.
+        <span th:if="${r != null}" th:text="'The backtest below shows whether the quiet stage paid in ' + ${r.sessions} + ' stored sessions.'"></span>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 90 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="tiles">
+            <div class="card tile" th:each="g, st : ${ {r.quiet, r.markup, r.pumped} }">
+                <div class="k" th:text="${stages[st.index].title}"></div>
+                <div class="v" th:text="${g.size()}"></div>
+                <div class="s" th:text="'at the close of ' + ${@fmt.day(r.lastDay)}"></div>
+            </div>
+            <div class="card tile"><div class="k">Floorsheet history</div>
+                <div class="v" th:classappend="${r.floorsheetDays < 10} ? 'neg'" th:text="${r.floorsheetDays} + (${r.floorsheetDays >= brokerWindow} ? '+' : '') + ' days'"></div>
+                <div class="s" th:text="${r.floorsheetDays == 0} ? 'none collected yet: see Brokers' : ${@fmt.day(r.floorsheetFrom)} + ' → ' + ${@fmt.day(r.floorsheetTo)}"></div></div>
+        </div>
+
+        <!-- price and volume stages -->
+        <section class="card block" th:each="g, st : ${ {r.quiet, r.markup, r.pumped} }" th:with="stage=${stages[st.index]}">
+            <h2><span class="pill" th:classappend="${stage.tone}" th:text="${stage.title}"></span> <span class="muted small" th:text="${g.size()}"></span></h2>
+            <p class="sub" th:text="${stage.rule} + '.'"></p>
+            <p th:if="${g.isEmpty()}" class="muted">None at the latest close.</p>
+            <div class="table-wrap" th:unless="${g.isEmpty()}">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Footprint</th><th class="num">Close</th><th class="num">Trade size vs normal</th>
+                        <th class="num">Turnover vs normal</th><th class="num">10 sessions</th><th class="num">20 sessions</th><th class="num">Circuit ↑ · ↓</th>
+                        <th class="num">Avg trade</th><th class="num">Turnover today</th><th>Footprints</th><th></th></tr></thead>
+                    <tbody>
+                    <tr th:each="f : ${g}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${f.symbol})}" th:text="${f.symbol}"></a><small th:text="${f.sector}"></small></td>
+                        <td class="num" th:style="${@fmt.shade(f.score / 100.0, 1)}"><b th:text="${f.score}"></b></td>
+                        <td class="num" th:text="${@fmt.price(f.close)}"></td>
+                        <td class="num" th:classappend="${f.bigTicket >= 1.5} ? 'pos' : ''" th:text="${@fmt.ratio(f.bigTicket)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(f.turnoverSurge)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(f.ret10Pct)}" th:text="${@fmt.pct(f.ret10Pct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(f.ret20Pct)}" th:text="${@fmt.pct(f.ret20Pct)}"></td>
+                        <td class="num" th:text="${f.circuitUps} + ' · ' + ${f.circuitDowns}"></td>
+                        <td class="num muted" th:text="${@fmt.money(f.avgTradeSize)}" title="average traded value per transaction, last 5 sessions"></td>
+                        <td class="num" th:text="${@fmt.money(f.turnoverToday)}"></td>
+                        <td class="small" style="white-space:normal;min-width:240px" th:text="${#strings.listJoin(f.reasons, ' · ')}"></td>
+                        <td><a class="btn sm" th:href="@{/brokers(sessions=20, symbol=${f.symbol})}">Brokers</a></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- floorsheet -->
+        <section class="card block">
+            <h2>Who is buying: the floorsheet</h2>
+            <p class="sub" th:text="'Broker totals over the last ' + ${brokerWindow} + ' collected sessions (or fewer, if that is all there is), with the price change over the same days. '
+                + 'The top buyer is re-checked over the last ' + ${brokerRecent} + ' sessions.'"></p>
+            <div class="note" th:if="${r.floorsheetDays < 10}">
+                <span th:text="'Only ' + ${r.floorsheetDays} + ' day(s) of floorsheet collected.'"></span>
+                Broker footprints need history: the floorsheet is collected once a day after the close (Brokers → collect), so this part fills in over the coming weeks.
+            </div>
+            <th:block th:each="grp : ${ { {'Quiet broker accumulation', r.brokerQuiet}, {'Top buyer now selling', r.brokerTurning},
+                                          {'Accumulated and moving', r.brokerMoving}, {'Operator warning', r.operator} } }">
+                <h4 style="margin-top:14px" th:text="${grp[0]} + ' (' + ${grp[1].size()} + ')'"></h4>
+                <p th:if="${grp[1].isEmpty()}" class="muted small">None.</p>
+                <div class="table-wrap" th:unless="${grp[1].isEmpty()}">
+                    <table>
+                        <thead><tr><th>Stock</th><th>Signal</th><th class="num">Top 3 net buy</th><th class="num">Top buyer share</th><th class="num">Self-trades</th>
+                            <th>Top buyer</th><th class="num">Their avg price</th><th class="num">Last close</th><th class="num">Price change</th>
+                            <th class="num">Top buyer, recent</th><th>Meaning</th></tr></thead>
+                        <tbody>
+                        <tr th:each="b : ${grp[1]}">
+                            <td class="sym"><a th:href="@{/brokers(sessions=20, symbol=${b.symbol})}" th:text="${b.symbol}"></a><small th:text="${b.sector}"></small></td>
+                            <td><span class="pill" th:classappend="${b.tone}" th:text="${b.kind}"></span></td>
+                            <td class="num" th:text="${@fmt.decimal(b.top3NetBuyShare, 0)} + '%'"></td>
+                            <td class="num" th:text="${@fmt.decimal(b.topBuyerShare, 0)} + '%'"></td>
+                            <td class="num" th:classappend="${b.selfShare >= 10} ? 'neg' : ''" th:text="${@fmt.decimal(b.selfShare, 0)} + '%'"></td>
+                            <td><a th:if="${b.topBuyer != null}" th:href="@{/brokers(sessions=20, broker=${b.topBuyer})}" th:text="'Broker ' + ${b.topBuyer}"></a>
+                                <small class="muted" th:if="${b.topBuyerNetQty != null}" th:text="' net ' + ${@fmt.count(b.topBuyerNetQty)}"></small></td>
+                            <td class="num" th:text="${@fmt.price(b.topBuyersAvgPrice)}"></td>
+                            <td class="num" th:text="${@fmt.price(b.lastClose)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(b.priceChangePct)}" th:text="${@fmt.pct(b.priceChangePct)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(b.recentTopBuyerNetQty)}" th:text="${b.recentTopBuyerNetQty != null} ? ${@fmt.count(b.recentTopBuyerNetQty)} : '—'"></td>
+                            <td class="small" style="white-space:normal;min-width:220px" th:text="${b.note}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </th:block>
+        </section>
+
+        <!-- history -->
+        <section class="card block">
+            <h2>Did buying at each stage pay?</h2>
+            <p class="sub" th:text="'The price-and-volume stages over ' + ${r.sessions} + ' stored sessions (' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}
+                + '), one signal per stock per 10 sessions. Buy at the next open, T+2 settlement, 0.8% round-trip charges, before tax. Design period until '
+                + ${@fmt.day(r.split)} + ', the rest out-of-sample. Floorsheet signals are not backtested: there is not enough floorsheet history yet.'"></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Stage</th><th>Exit</th><th class="num">Design: trades</th><th class="num">days</th><th class="num">hit</th><th class="num">avg</th>
+                        <th class="num">Out-of-sample: trades</th><th class="num">days</th><th class="num">hit</th><th class="num">avg</th><th class="num">median</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rows}">
+                        <td><span class="pill" th:classappend="${x.stage.tone}" th:text="${x.stage.title}"></span></td>
+                        <td class="small" th:text="${x.exit.title}"></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num muted" th:text="${x.design.days}"></td>
+                        <td class="num" th:text="${x.design.n > 0} ? ${@fmt.decimal(x.design.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${x.design.n > 0} ? ${@fmt.pct(x.design.avgPct)} : '—'"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num muted" th:text="${x.oos.days}"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.avgPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.medianPct)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
