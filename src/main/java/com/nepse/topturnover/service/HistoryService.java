@@ -21,6 +21,7 @@ import com.nepse.topturnover.analysis.BacktestService;
 import com.nepse.topturnover.analysis.AdvancedStrategyService;
 import com.nepse.topturnover.analysis.FeatureService;
 import com.nepse.topturnover.analysis.StandardStrategyService;
+import com.nepse.topturnover.analysis.StrategyLabService;
 import com.nepse.topturnover.analysis.Sectors;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.crawler.CrawlException;
@@ -56,6 +57,7 @@ public class HistoryService {
     private final BacktestService backtest;
     private final StandardStrategyService standard;
     private final AdvancedStrategyService advanced;
+    private final StrategyLabService lab;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "nepse-history");
         t.setDaemon(true);
@@ -64,7 +66,9 @@ public class HistoryService {
     private volatile Status status = Status.idle();
 
     public HistoryService(NepseProperties props, MarketDataRepository repo, FeatureService features, BacktestService backtest,
-                          StandardStrategyService standard, AdvancedStrategyService advanced) {
+                          StandardStrategyService standard, AdvancedStrategyService advanced,
+                          StrategyLabService lab) {
+        this.lab = lab;
         this.advanced = advanced;
         this.backtest = backtest;
         this.standard = standard;
@@ -182,6 +186,7 @@ public class HistoryService {
         backtest.evict();
         standard.evict();
         advanced.evict();
+        lab.evict();
         String done = String.format("Done: %d session(s) stored now, %d already stored, %d date(s) without a session%s.",
                 stored, already, skipped, guessed > 0 ? ", sectors guessed for " + guessed + " new stock(s)" : "");
         if (have < target) done += " Reached the request limit before " + target + " sessions; run it again to continue.";
@@ -236,6 +241,7 @@ public class HistoryService {
         backtest.evict();
         standard.evict();
         advanced.evict();
+        lab.evict();
         String msg = String.format("Loaded sectors for %d stocks from ShareSansar (%d changed from before); MANUAL choices kept.", r[0], r[1]);
         repo.logCrawl(now().withNano(0), SOURCE_SECTORS, "STORED", date, msg);
         LOG.info(msg);

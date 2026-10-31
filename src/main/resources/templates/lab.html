@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Strategy lab')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Strategy lab</h1>
+            <p>Two textbook strategies with fixed, untuned parameters, run as a real account of
+                <b th:text="'Rs ' + ${@fmt.count(capital)}"></b>: position limits, NEPSE charges, 7.5% capital gains tax, T+2 settlement
+                (nothing sold before the 3rd session), decisions at the close and orders at the next open, bonus/right adjusted prices.</p>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 110 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note" th:text="${r.sessions} + ' sessions: ' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)}
+             + '. Design period ends ' + ${@fmt.day(r.split)} + '; the rest is out-of-sample (the parameters were fixed in advance, not tuned on either part).'"></div>
+
+        <section class="card block">
+            <h2>Results</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Strategy</th><th class="num">Final value</th><th class="num">Return</th><th class="num">Design period</th>
+                        <th class="num">Out-of-sample</th><th class="num">Worst dip</th><th class="num">Trades</th><th class="num">Winners</th>
+                        <th class="num">Time invested</th><th class="num">Charges + tax</th></tr></thead>
+                    <tbody>
+                    <tr th:each="l : ${r.labs}">
+                        <td style="white-space:normal;min-width:300px"><b th:text="${l.lab.title}"></b><br><small class="muted" th:text="${l.lab.rule}"></small></td>
+                        <td class="num"><b th:text="'Rs ' + ${@fmt.count(l.finalValue)}"></b></td>
+                        <td class="num" th:style="${@fmt.heat(l.returnPct, 20)}"><b th:text="${@fmt.pct(l.returnPct)}"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(l.designReturnPct)}" th:text="${@fmt.pct(l.designReturnPct)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(l.outOfSampleReturnPct)}" th:text="${@fmt.pct(l.outOfSampleReturnPct)}"></td>
+                        <td class="num neg" th:text="${@fmt.pct(l.maxDrawdownPct)}"></td>
+                        <td class="num" th:text="${l.trades > 0} ? ${l.trades} : '—'"></td>
+                        <td class="num" th:text="${l.trades > 0} ? ${@fmt.decimal(l.winRate, 0)} + '%' : '—'"></td>
+                        <td class="num" th:text="${@fmt.decimal(l.exposurePct, 0)} + '%'"></td>
+                        <td class="num muted" th:text="${l.trades > 0} ? 'Rs ' + ${@fmt.count(l.charges + l.tax)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Account value</h2>
+            <div class="chart-box" style="height:340px"><canvas id="labChart"></canvas></div>
+        </section>
+
+        <section class="card block" th:each="l : ${r.labs}" th:if="${l.trades > 0 or !l.holdings.isEmpty()}">
+            <h2 th:text="${l.lab.title}"></h2>
+            <div class="grid-2">
+                <div>
+                    <h4>Holding now</h4>
+                    <p th:if="${l.holdings.isEmpty()}" class="muted">In cash.</p>
+                    <table th:unless="${l.holdings.isEmpty()}">
+                        <thead><tr><th>Stock</th><th>Since</th><th class="num">Entry</th><th class="num">Last close</th><th class="num">Change</th></tr></thead>
+                        <tbody>
+                        <tr th:each="h : ${l.holdings}">
+                            <td class="sym"><a th:href="@{/stock/{x}(x=${h.symbol})}" th:text="${h.symbol}"></a></td>
+                            <td th:text="${h.since}"></td>
+                            <td class="num" th:text="${@fmt.price(h.entry)}"></td>
+                            <td class="num" th:text="${@fmt.price(h.lastClose)}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(h.changePct)}" th:text="${@fmt.pct(h.changePct)}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <h4 style="margin-top:12px">Buy orders for the next session</h4>
+                    <p th:if="${l.buySignalsToday.isEmpty()}" class="muted">None.</p>
+                    <p><a th:each="s : ${l.buySignalsToday}" class="chip" th:href="@{/stock/{x}(x=${s})}" th:text="${s}"></a></p>
+                </div>
+                <div>
+                    <h4>Trades (newest first)</h4>
+                    <div style="max-height:360px;overflow-y:auto">
+                        <table>
+                            <thead><tr><th>Stock</th><th>Bought</th><th>Sold</th><th class="num">Days</th><th class="num">Net</th><th>Why sold</th></tr></thead>
+                            <tbody>
+                            <tr th:each="t : ${l.recentTrades}">
+                                <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a></td>
+                                <td th:text="${t.entryDate}"></td>
+                                <td th:text="${t.exitDate}"></td>
+                                <td class="num" th:text="${t.held}"></td>
+                                <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                                <td class="small muted" th:text="${t.reason}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <script th:inline="javascript">
+            const chart = /*[[${chart}]]*/ {};
+            window.addEventListener('DOMContentLoaded', () => {
+                const css = getComputedStyle(document.documentElement);
+                Chart.defaults.color = css.getPropertyValue('--muted').trim();
+                Chart.defaults.borderColor = css.getPropertyValue('--border').trim();
+                const colours = ['#2f5bea', '#12864a', '#8a93a3'];
+                new Chart(document.getElementById('labChart'), {
+                    type: 'line',
+                    data: { labels: chart.dates, datasets: chart.lines.map((l, i) => ({
+                        label: l.name, data: l.values, borderColor: colours[i % 3], borderWidth: i === 2 ? 1.5 : 2.5,
+                        borderDash: i === 2 ? [6, 4] : [], pointRadius: 0, tension: 0.1 })) },
+                    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                               scales: { y: { ticks: { callback: v => 'Rs ' + (v / 1e5).toFixed(1) + ' L' } } } }
+                });
+            });
+        </script>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
