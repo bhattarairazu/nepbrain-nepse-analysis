@@ -323,3 +323,24 @@ td.why span::before { content: "• "; }
 .nav-search input { width: 190px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
 .nav-search input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 @media (max-width: 700px) { .nav-search { width: 100%; } .nav-search input { width: 100%; } }
+.nav-search { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.find-hits { display: inline-flex; gap: 4px; }
+.find-hits button { font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.find-hits button:disabled { color: var(--muted); cursor: default; }
+.find-hits button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+tr.find-hit > td { background: var(--accent-soft); }
+tr.find-current > td { box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent); }
+tr.find-hidden { display: none; }
+
+/* Top 5 cards */
+.top5 { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.top5 > * { min-width: 0; }
+.pick { display: flex; flex-direction: column; }
+.pick-head { display: flex; align-items: center; gap: 10px; }
+.pick-rank { font-size: 20px; font-weight: 800; color: var(--accent); }
+.pick-sym { font-size: 17px; font-weight: 800; }
+.pick-score { margin-left: auto; text-align: center; border-radius: 10px; padding: 4px 8px; font-size: 18px; }
+.pick-score small { font-size: 11px; color: var(--muted); }
+.pick-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.pick-levels > div { background: var(--surface-2); border-radius: 8px; padding: 6px 8px; }
+.pick-levels small { display: block; font-size: 11px; }

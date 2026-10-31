@@ -9,12 +9,20 @@
         <div class="page-head" style="margin-bottom:6px">
             <div><h2>What every study says</h2>
                 <p class="sub" style="margin:4px 0 0">One line from each analysis in the app, at the latest close. Details are further down.</p></div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <a class="btn sm" th:if="${rep.onMyList}" th:href="@{/my-list}">★ On my list</a>
+            <form th:unless="${rep.onMyList}" method="post" th:action="@{/my-list/add}" style="display:inline">
+                <input type="hidden" name="symbol" th:value="${rep.symbol}">
+                <input type="hidden" name="back" th:value="'/stock/' + ${rep.symbol}">
+                <button class="btn sm primary" type="submit">+ My list</button>
+            </form>
             <form method="post" th:action="@{/watchlist/add}" style="display:flex;gap:6px;align-items:center">
                 <input type="hidden" name="symbol" th:value="${rep.symbol}">
                 <input name="note" placeholder="Why you are watching it" maxlength="500" style="width:200px">
-                <button class="btn sm" type="submit">+ Watchlist</button>
+                <button class="btn sm" type="submit">+ Signal watchlist</button>
                 <a class="btn sm" th:href="@{/journal/new(symbol=${rep.symbol})}">Log a buy</a>
             </form>
+            </div>
         </div>
         <table>
             <tbody>

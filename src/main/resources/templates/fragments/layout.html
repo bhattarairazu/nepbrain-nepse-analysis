@@ -18,7 +18,9 @@
     </a>
     <nav>
         <a th:href="@{/signals}" th:classappend="${active == 'signals'} ? 'on'">▶ Signals</a>
-        <a th:href="@{/watchlist}" th:classappend="${active == 'watchlist'} ? 'on'">★ Watchlist</a>
+        <a th:href="@{/top5}" th:classappend="${active == 'top5'} ? 'on'">◆ Top 5</a>
+        <a th:href="@{/my-list}" th:classappend="${active == 'mylist'} ? 'on'">★ My list</a>
+        <a th:href="@{/watchlist}" th:classappend="${active == 'watchlist'} ? 'on'">Signal watchlist</a>
         <a th:href="@{/ideas}" th:classappend="${active == 'ideas'} ? 'on'">Ideas</a>
         <a th:href="@{/patterns}" th:classappend="${active == 'patterns'} ? 'on'">Patterns</a>
         <a th:href="@{/sectors}" th:classappend="${active == 'sectors'} ? 'on'">Sectors</a>
@@ -37,7 +39,7 @@
         <a th:href="@{/crawl}" th:classappend="${active == 'crawl'} ? 'on'">Data</a>
     </nav>
     <form class="nav-search" method="get" th:action="@{/search}" role="search" th:attr="data-symbols=@{/api/symbols}">
-        <input name="q" list="nav-symbols" placeholder="Search stock…" autocomplete="off" aria-label="Search a stock by symbol or name" required>
+        <input name="q" list="nav-symbols" placeholder="Find or open a stock…" autocomplete="off" aria-label="Search a stock by symbol or name" required>
         <datalist id="nav-symbols"></datalist>
     </form>
 </header>

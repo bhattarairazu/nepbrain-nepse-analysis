@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Top 5')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Top 5</h1>
+            <p>The five stocks that best fit one formula: <b>sideways</b> for 30 sessions (range ≤ 15%), <b>regularly in the top-20 turnover and volume lists</b>,
+                <b>turnover and volume rising sharply</b>, and the <b>price still flat</b>. Stocks already being pushed up (two near-circuit days or +15% in
+                10 sessions) are left out.</p>
+        </div>
+    </div>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history (needs about 90 sessions). Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}" th:with="t5=${r.rows[0]}">
+        <div class="note">
+            <b>How far to trust it.</b>
+            <span th:text="'Over the stored history, the daily top 5 of this formula reached +' + ${@fmt.decimal(target, 0)} + '% in '
+                + ${@fmt.decimal(t5.oos.hitPct, 0)} + '% of out-of-sample picks and averaged ' + ${@fmt.pct(t5.oos.avgPct)} + ' a trade after charges ('
+                + ${t5.oos.n} + ' picks). '"></span>
+            <span th:text="${t5.oos.avgPct > 0} ? 'That is positive, but the sample is small: size positions modestly and follow the stop.'
+                : 'That is below zero: treat the list as stocks to study, not as orders. Confirm with the stock page, brokers and your own judgement.'"></span>
+            All picks are recorded in the <a th:href="@{/watchlist}">signal watchlist</a>, which keeps score from today on.
+        </div>
+
+        <section class="card block">
+            <h2 th:text="'Top 5 at the close of ' + ${@fmt.day(r.lastDay)}"></h2>
+            <p class="sub" th:text="${r.scored} + ' liquid sideways stocks scored; a pick needs ' + ${minScore} + '+ of 100. Plan for each: buy at the next open (skip it if it opens 3%+ higher), '
+                + 'sell at +' + ${@fmt.decimal(target, 0)} + '% from the 3rd session (T+2), or at the next open after a close ' + ${@fmt.decimal(stop, 0)} + '% below the entry, or after '
+                + ${window} + ' sessions.' + (${r.brokersUsed} ? ' Floorsheet accumulation adds 10 points.' : ' (Floorsheet accumulation would add 10 points; not enough collected yet.)')"></p>
+            <p th:if="${r.top.isEmpty()}" class="muted" th:text="'No stock scores ' + ${minScore} + ' or more today: nothing fits the formula well enough. The closest ones are below.'"></p>
+            <div class="top5" th:unless="${r.top.isEmpty()}">
+                <div class="card pick" th:each="p : ${r.top}">
+                    <div class="pick-head">
+                        <span class="pick-rank" th:text="'#' + ${p.rank}"></span>
+                        <div><a class="pick-sym" th:href="@{/stock/{x}(x=${p.symbol})}" th:text="${p.symbol}"></a>
+                            <small class="muted" style="display:block" th:text="${p.sector}"></small></div>
+                        <div class="pick-score" th:style="${@fmt.shade(p.score / 100.0, 1)}"><b th:text="${p.score}"></b><small>/100</small></div>
+                    </div>
+                    <div class="pick-levels">
+                        <div><small class="muted">Close</small><b th:text="${@fmt.price(p.close)}"></b></div>
+                        <div><small class="muted">Stop</small><b class="neg" th:text="${@fmt.price(p.stopPrice)}"></b></div>
+                        <div><small class="muted">Target</small><b class="pos" th:text="${@fmt.price(p.targetPrice)}"></b></div>
+                    </div>
+                    <ul class="howto small" style="margin:8px 0 0">
+                        <li th:each="w : ${p.reasons}" th:text="${w}"></li>
+                    </ul>
+                    <div th:each="c : ${p.cautions}" class="small" style="margin-top:4px"><span class="pill warn" style="white-space:normal" th:text="${c}"></span></div>
+                    <small class="muted" style="display:block;margin-top:6px" th:text="'Range ' + ${@fmt.price(p.baseLow)} + ' → ' + ${@fmt.price(p.baseHigh)}"></small>
+                    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+                        <form method="post" th:action="@{/my-list/add}" style="display:inline">
+                            <input type="hidden" name="symbol" th:value="${p.symbol}">
+                            <input type="hidden" name="intent" value="BUY">
+                            <input type="hidden" name="stopPrice" th:value="${#numbers.formatDecimal(p.stopPrice, 1, 2)}">
+                            <input type="hidden" name="sellAbove" th:value="${#numbers.formatDecimal(p.targetPrice, 1, 2)}">
+                            <input type="hidden" name="note" th:value="'Top 5 #' + ${p.rank} + ' on ' + ${p.date} + ', score ' + ${p.score}">
+                            <input type="hidden" name="back" value="/top5">
+                            <button class="btn sm primary" type="submit">+ My list</button>
+                        </form>
+                        <a class="btn sm" th:href="@{/journal/new(symbol=${p.symbol}, rule='Top 5', stop=${#numbers.formatDecimal(p.stopPrice, 1, 2)},
+                            target=${#numbers.formatDecimal(p.targetPrice, 1, 2)}, price=${#numbers.formatDecimal(p.close, 1, 2)})}">Log buy</a>
+                        <a class="btn sm" th:href="@{/stock/{x}(x=${p.symbol})}">Full analysis</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card block" th:unless="${r.nearMisses.isEmpty()}">
+            <h2>Next in line</h2>
+            <p class="sub">The next best scores today, in case a pick gaps up at the open or you want more to study.</p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Score</th><th class="num">Close</th><th class="num">Range</th><th class="num">10 sessions</th>
+                        <th class="num">Top-20 turnover · volume</th><th class="num">Turnover · volume vs normal</th><th class="num">Up/down vol</th><th>Why</th></tr></thead>
+                    <tbody>
+                    <tr th:each="p : ${r.nearMisses}">
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.symbol})}" th:text="${p.symbol}"></a><small th:text="${p.sector}"></small></td>
+                        <td class="num" th:style="${@fmt.shade(p.score / 100.0, 1)}"><b th:text="${p.score}"></b></td>
+                        <td class="num" th:text="${@fmt.price(p.close)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(p.depthPct, 1)} + '%'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(p.ret10Pct)}" th:text="${@fmt.pct(p.ret10Pct)}"></td>
+                        <td class="num" th:text="${p.topTurnoverDays} + ' · ' + ${p.topVolumeDays} + ' / 20'"></td>
+                        <td class="num" th:text="${@fmt.ratio(p.turnoverSurge)} + ' · ' + ${@fmt.ratio(p.volumeSurge)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(p.upDownVolume, 2)}"></td>
+                        <td class="small" style="white-space:normal;min-width:240px" th:text="${#strings.listJoin(p.reasons, ' · ')}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>The formula (100 points)</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>What it looks for</th><th class="num">Points</th></tr></thead>
+                    <tbody>
+                    <tr><td>Sideways: 30-session range ≤ 8% / ≤ 12% / ≤ 15% (required)</td><td class="num">20 / 12 / 6</td></tr>
+                    <tr><td>In the top-20 turnover list on 10+ / 5+ / 2+ of the last 20 sessions</td><td class="num">15 / 10 / 5</td></tr>
+                    <tr><td>In the top-20 volume list on 10+ / 5+ / 2+ of the last 20 sessions</td><td class="num">15 / 10 / 5</td></tr>
+                    <tr><td>Turnover over the last 5 sessions ≥ 3× / 2× / 1.5× its 60-session average</td><td class="num">15 / 10 / 5</td></tr>
+                    <tr><td>Volume over the last 5 sessions ≥ 3× / 2× / 1.5× its 60-session average</td><td class="num">10 / 7 / 4</td></tr>
+                    <tr><td>Price still flat: within ±3% / ±5% over 10 sessions</td><td class="num">10 / 5</td></tr>
+                    <tr><td>Accumulation: up-day volume ≥ 1.5× / 1.2× down-day volume over the base</td><td class="num">10 / 5</td></tr>
+                    <tr><td>Big orders: average trade size ≥ 1.5× its normal</td><td class="num">5</td></tr>
+                    <tr><td>Floorsheet: a few brokers accumulating (latest 20 sessions only; not in the backtest)</td><td class="num">10</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block">
+            <h2>Did the formula's picks pay?</h2>
+            <p class="sub" th:text="'Every session of the stored history (' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)} + '), the same formula, one pick per stock per 10 sessions. '
+                + 'Buy at the next open, T+2, 0.8% round-trip charges, before tax. Design period until ' + ${@fmt.day(r.split)} + ', the rest out-of-sample. '
+                + 'The weights were set before running this test.'"></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Picks</th><th>Exit</th><th class="num">Design: trades</th><th class="num">hit</th><th class="num">avg</th>
+                        <th class="num">Out-of-sample: trades</th><th class="num">days</th><th class="num">hit</th><th class="num">winners</th><th class="num">avg</th><th class="num">median</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rows}">
+                        <td style="white-space:normal;min-width:220px"><b th:text="${x.name}"></b><br><small class="muted" th:text="${x.rule}"></small></td>
+                        <td class="small" th:text="${x.exit.title}"></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num" th:text="${x.design.n > 0} ? ${@fmt.decimal(x.design.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${x.design.n > 0} ? ${@fmt.pct(x.design.avgPct)} : '—'"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num muted" th:text="${x.oos.days}"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.hitPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.winPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.avgPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.medianPct)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <h4 style="margin-top:14px" th:unless="${r.recent.isEmpty()}">Picks of the last 30 sessions</h4>
+            <div class="table-wrap" style="max-height:380px;overflow-y:auto" th:unless="${r.recent.isEmpty()}">
+                <table>
+                    <thead><tr><th>Date</th><th class="num">Rank</th><th>Stock</th><th class="num">Score</th><th class="num">Net (+7% / −5% / 10)</th><th>Exit</th></tr></thead>
+                    <tbody>
+                    <tr th:each="p : ${r.recent}">
+                        <td th:text="${p.date}"></td>
+                        <td class="num" th:text="'#' + ${p.rank}"></td>
+                        <td class="sym"><a th:href="@{/stock/{x}(x=${p.symbol})}" th:text="${p.symbol}"></a></td>
+                        <td class="num" th:text="${p.score}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(p.netPct)}" th:text="${p.netPct != null} ? ${@fmt.pct(p.netPct)} : 'open'"></td>
+                        <td class="small muted" th:text="${p.exit != null} ? ${p.exit} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

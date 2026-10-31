@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head th:replace="~{fragments/layout :: head('Watchlist')}"></head>
+<head th:replace="~{fragments/layout :: head('Signal watchlist')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: nav}"></header>
 <main>
     <div class="page-head">
         <div>
-            <h1>Watchlist</h1>
+            <h1>Signal watchlist</h1>
             <p>Every buy setup flagged by <a th:href="@{/bases}">Sideways bases</a>, <a th:href="@{/pullback}">Breakout pullback</a> and
                 <a th:href="@{/moves}">Move study</a> is recorded here automatically (each evening, and whenever this page opens), plus anything you add.
                 Each one is followed with the backtests' plan: buy at the next open, sell at <b th:text="'+' + ${@fmt.decimal(defaultTarget, 0)} + '%'"></b> from T+3,

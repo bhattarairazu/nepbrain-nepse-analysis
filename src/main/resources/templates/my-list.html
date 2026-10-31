@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('My list')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>My list</h1>
+            <p>Stocks you follow yourself: only you add or remove them (the <a th:href="@{/watchlist}">signal watchlist</a> fills itself from the studies).
+                Set what you intend to do and your price levels; alerts show when the latest close reaches them, next to what every study says about the stock.
+                Prices are actual traded prices.</p>
+        </div>
+    </div>
+
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+
+    <!-- add -->
+    <section class="card block">
+        <h2>Add a stock</h2>
+        <form method="post" th:action="@{/my-list/add}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+            <label class="small">Symbol<br><input name="symbol" list="my-symbols" required autocomplete="off" style="text-transform:uppercase;width:120px"></label>
+            <datalist id="my-symbols"><option th:each="s : ${b.symbols}" th:value="${s}"></option></datalist>
+            <label class="small">I want to<br>
+                <select name="intent"><option th:each="i : ${intents}" th:value="${i.name()}" th:text="${i.label}"></option></select></label>
+            <label class="small">Buy at or under<br><input name="buyBelow" type="number" step="0.1" min="0" style="width:100px"></label>
+            <label class="small">Stop (close at or under)<br><input name="stopPrice" type="number" step="0.1" min="0" style="width:100px"></label>
+            <label class="small">Sell at or above<br><input name="sellAbove" type="number" step="0.1" min="0" style="width:100px"></label>
+            <label class="small" style="flex:1;min-width:220px">Note: why, what would change your mind<br><input name="note" maxlength="1000" style="width:100%"></label>
+            <button class="btn primary" type="submit">Add</button>
+        </form>
+    </section>
+
+    <div class="tiles">
+        <div class="card tile" th:each="i : ${intents}" th:with="n=${b.rows.?[intent.name() == '__${i.name()}__'].size()}">
+            <div class="k" th:text="${i.label}"></div><div class="v" th:text="${n}"></div><div class="s">stocks</div></div>
+        <div class="card tile"><div class="k">Alerts</div><div class="v" th:classappend="${b.alerts > 0} ? 'neg'" th:text="${b.alerts}"></div>
+            <div class="s">levels reached or warnings</div></div>
+    </div>
+
+    <section class="card block">
+        <h2>Your stocks <span class="muted small" th:text="${b.rows.size()}"></span></h2>
+        <p th:if="${b.rows.isEmpty()}" class="muted">Your list is empty. Add a stock above, or use "+ My list" on any stock's page.</p>
+        <div class="table-wrap" th:unless="${b.rows.isEmpty()}">
+            <table>
+                <thead><tr><th>Stock</th><th>Intent</th><th class="num">Last close</th><th class="num">Day</th><th class="num">Since added</th>
+                    <th class="num">Buy under</th><th class="num">Stop</th><th class="num">Sell above</th><th>Alerts</th><th>What the studies say</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="r : ${b.rows}" th:with="it=${r.item}, l=${r.latest}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${it.symbol})}" th:text="${it.symbol}"></a><small th:text="${l != null} ? ${l.sector} : ''"></small></td>
+                    <td><span class="pill" th:classappend="${r.intent.tone}" th:text="${r.intent.label}"></span></td>
+                    <td class="num" th:text="${l != null} ? ${@fmt.price(l.close)} : '—'" th:title="${l != null} ? ${l.date} : ''"></td>
+                    <td class="num" th:classappend="${l != null} ? ${@fmt.tone(l.changePct)} : ''" th:text="${l != null} ? ${@fmt.pct(l.changePct)} : '—'"></td>
+                    <td class="num" th:classappend="${@fmt.tone(r.sinceAddedPct)}">
+                        <b th:text="${@fmt.pct(r.sinceAddedPct)}"></b>
+                        <small class="muted" style="display:block" th:text="${it.addedDate} + (${it.addedPrice != null} ? ' at ' + ${@fmt.price(it.addedPrice)} : '')"></small></td>
+                    <td class="num" th:text="${it.buyBelow != null} ? ${@fmt.price(it.buyBelow)} : '—'"
+                        th:title="${r.toBuyPct != null} ? ${@fmt.pct(r.toBuyPct)} + ' from the close' : ''"></td>
+                    <td class="num neg" th:text="${it.stopPrice != null} ? ${@fmt.price(it.stopPrice)} : '—'"
+                        th:title="${r.toStopPct != null} ? 'close is ' + ${@fmt.pct(r.toStopPct)} + ' from it' : ''"></td>
+                    <td class="num pos" th:text="${it.sellAbove != null} ? ${@fmt.price(it.sellAbove)} : '—'"
+                        th:title="${r.toSellPct != null} ? 'close is ' + ${@fmt.pct(r.toSellPct)} + ' from it' : ''"></td>
+                    <td class="small" style="white-space:normal;min-width:200px">
+                        <span th:if="${r.alerts.isEmpty()}" class="muted">None</span>
+                        <div th:each="a : ${r.alerts}" style="margin-bottom:3px"><span class="pill" th:classappend="${a.tone}" th:text="${a.text}" style="white-space:normal"></span></div>
+                    </td>
+                    <td class="small" style="white-space:normal;min-width:320px">
+                        <div th:each="p : ${r.reads}" style="margin-bottom:3px">
+                            <span class="pill" th:classappend="${p.tone}" th:text="${p.topic}"></span> <span th:text="${p.text}"></span></div>
+                        <div class="muted" th:if="${it.note != null}" th:text="'Your note: ' + ${it.note}"></div>
+                    </td>
+                    <td style="white-space:nowrap;vertical-align:top">
+                        <details>
+                            <summary class="btn sm">Edit</summary>
+                            <form method="post" th:action="@{/my-list/{id}/save(id=${it.id})}" style="display:grid;gap:6px;margin-top:6px;min-width:220px">
+                                <select name="intent"><option th:each="i : ${intents}" th:value="${i.name()}" th:text="${i.label}" th:selected="${i == r.intent}"></option></select>
+                                <label class="small">Buy at or under <input name="buyBelow" type="number" step="0.1" min="0" th:value="${it.buyBelow}" style="width:100px"></label>
+                                <label class="small">Stop <input name="stopPrice" type="number" step="0.1" min="0" th:value="${it.stopPrice}" style="width:100px"></label>
+                                <label class="small">Sell at or above <input name="sellAbove" type="number" step="0.1" min="0" th:value="${it.sellAbove}" style="width:100px"></label>
+                                <textarea name="note" rows="3" maxlength="1000" placeholder="Note" th:text="${it.note}"></textarea>
+                                <button class="btn sm primary" type="submit">Save</button>
+                            </form>
+                        </details>
+                        <a class="btn sm" th:href="@{/journal/new(symbol=${it.symbol}, stop=${it.stopPrice}, target=${it.sellAbove}, rule='My list')}">Log buy</a>
+                        <form method="post" th:action="@{/my-list/{id}/remove(id=${it.id})}" style="display:inline"
+                              th:attr="data-confirm='Remove ' + ${it.symbol} + ' from your list?'" onsubmit="return confirm(this.dataset.confirm)">
+                            <button class="btn sm" type="submit">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

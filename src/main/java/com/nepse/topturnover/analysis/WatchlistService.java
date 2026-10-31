@@ -42,6 +42,7 @@ public class WatchlistService {
         RETEST_TURN("Retest + turn up", "Breakout pullback", "/pullback"),
         MOVE_SCORE("Top lift score", "Move study", "/moves"),
         WASHOUT("Washout day", "Move study", "/moves"),
+        RECOMMENDED("Top 5 pick", "Top 5", "/top5"),
         PLAYER_QUIET("Quiet build-up", "Big players", "/players"),
         BROKER_ACCUM("Quiet broker accumulation", "Big players", "/players"),
         MANUAL("Added by hand", "You", "/watchlist");
@@ -99,15 +100,17 @@ public class WatchlistService {
     private final BreakoutPullbackService pullbacks;
     private final MoveStudyService moves;
     private final BigPlayerService players;
+    private final RecommendationService top5;
     private final WatchlistRepository repo;
 
     public WatchlistService(BacktestService backtest, BaseBreakoutService bases, BreakoutPullbackService pullbacks, MoveStudyService moves,
-                            BigPlayerService players, WatchlistRepository repo) {
+                            BigPlayerService players, RecommendationService top5, WatchlistRepository repo) {
         this.backtest = backtest;
         this.bases = bases;
         this.pullbacks = pullbacks;
         this.moves = moves;
         this.players = players;
+        this.top5 = top5;
         this.repo = repo;
     }
 
@@ -128,6 +131,7 @@ public class WatchlistService {
         pullbacks.run().ifPresent(r -> all.addAll(r.signals()));
         moves.run().ifPresent(r -> all.addAll(r.signals()));
         players.run().ifPresent(r -> all.addAll(r.signals()));
+        top5.run().ifPresent(r -> all.addAll(r.signals()));
         int added = 0;
         for (WatchSignal s : all) {
             if (repo.addIfNew(s.symbol(), s.sector(), s.source(), s.date(), s.close(), s.score(), s.detail(),
@@ -332,6 +336,8 @@ public class WatchlistService {
         }));
         players.run().ifPresent(r -> r.rows().stream().filter(x -> x.exit() == Exit.SHORT && x.stage() == BigPlayerService.Stage.QUIET)
                 .forEach(x -> bt.put(Source.PLAYER_QUIET, line(x.oos().n(), x.oos().hitPct(), x.oos().avgPct()))));
+        top5.run().ifPresent(r -> r.rows().stream().filter(x -> x.exit() == Exit.SHORT && x.name().equals("Daily top 5"))
+                .forEach(x -> bt.put(Source.RECOMMENDED, line(x.oos().n(), x.oos().hitPct(), x.oos().avgPct()))));
         bt.put(Source.BROKER_ACCUM, "not backtested yet: needs a few months of floorsheet history");
         return bt;
     }
