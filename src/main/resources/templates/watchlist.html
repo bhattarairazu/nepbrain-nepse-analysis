@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Watchlist')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Watchlist</h1>
+            <p>Every buy setup flagged by <a th:href="@{/bases}">Sideways bases</a>, <a th:href="@{/pullback}">Breakout pullback</a> and
+                <a th:href="@{/moves}">Move study</a> is recorded here automatically (each evening, and whenever this page opens), plus anything you add.
+                Each one is followed with the backtests' plan: buy at the next open, sell at <b th:text="'+' + ${@fmt.decimal(defaultTarget, 0)} + '%'"></b> from T+3,
+                sell at the next open after a close <b th:text="${@fmt.decimal(defaultStop, 0)} + '%'"></b> below the entry, or after
+                <b th:text="${defaultWindow}"></b> sessions. Prices are bonus/right adjusted; returns are after 0.8% charges, before tax.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn" th:href="@{/watchlist(archived=${!archived})}" th:text="${archived} ? 'Hide archived' : 'Show archived'"></a>
+        </div>
+    </div>
+
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+    <div th:if="${b.added > 0}" class="note" th:text="${b.added} + ' new signal(s) recorded from the studies.'"></div>
+
+    <div class="tiles" th:with="open=${b.active.?[status.name() == 'OPEN']}, pending=${b.active.?[status.name() == 'PENDING']},
+                                 due=${b.active.?[status.name() == 'STOP_DUE']}, wins=${b.closed.?[netPct != null and netPct > 0]}">
+        <div class="card tile"><div class="k" th:text="'Triggered at the close of ' + ${@fmt.day(b.lastDay)}"></div>
+            <div class="v" th:text="${b.triggeredToday.size()}"></div><div class="s">buy at the next open</div></div>
+        <div class="card tile"><div class="k">Holding</div><div class="v" th:text="${open.size()}"></div>
+            <div class="s" th:text="${pending.size()} + ' waiting for the open'"></div></div>
+        <div class="card tile"><div class="k">Stop broken</div><div class="v" th:classappend="${due.size() > 0} ? 'neg'" th:text="${due.size()}"></div>
+            <div class="s">closed below the stop: sell at the next open</div></div>
+        <div class="card tile"><div class="k">Closed · live win rate</div>
+            <div class="v" th:text="${b.closed.size()} + ' · ' + (${b.closed.isEmpty()} ? '—' : ${#numbers.formatDecimal(100.0 * wins.size() / b.closed.size(), 1, 0)} + '%')"></div>
+            <div class="s">winners after charges</div></div>
+    </div>
+
+    <!-- active -->
+    <section class="card block">
+        <h2>Active <span class="muted small" th:text="${b.active.size()}"></span></h2>
+        <p class="sub">Waiting for the open, holding, or due to be sold. Open "Notes" for how each one is doing against its plan.</p>
+        <p th:if="${b.active.isEmpty()}" class="muted">Nothing active.</p>
+        <div class="table-wrap" th:unless="${b.active.isEmpty()}">
+            <table>
+                <thead><tr><th>Stock</th><th>Setup</th><th>Triggered</th><th>Status</th><th class="num">Entry</th><th class="num">Last close</th>
+                    <th class="num">Change</th><th class="num">Best · worst</th><th class="num">vs market</th><th class="num">Target · stop</th>
+                    <th class="num">Left</th><th>How it is doing</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="v : ${b.active}" th:with="it=${v.item}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${it.symbol})}" th:text="${it.symbol}"></a><small th:text="${it.sector}"></small></td>
+                    <td class="small"><a th:href="@{${v.source.href}}" th:text="${v.source.title}"></a><br><span class="muted" th:text="${v.source.page}"></span></td>
+                    <td class="small" th:text="${it.signalDate}" th:title="'signal close ' + ${@fmt.price(it.signalClose)}"></td>
+                    <td><span class="pill" th:classappend="${v.status.tone}" th:text="${v.status.label}"></span></td>
+                    <td class="num small" th:text="${v.entry != null} ? ${@fmt.price(v.entry)} + ' · ' + ${v.entryDate} : '—'"></td>
+                    <td class="num" th:text="${@fmt.price(v.lastClose)}" th:title="${v.lastDate}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(v.changePct)}"><b th:text="${@fmt.pct(v.changePct)}"></b></td>
+                    <td class="num small" th:text="${v.bestPct != null} ? ${@fmt.pct(v.bestPct)} + ' · ' + ${@fmt.pct(v.worstPct)} : '—'"></td>
+                    <td class="num small" th:classappend="${v.changePct != null and v.marketPct != null} ? ${@fmt.tone(v.changePct - v.marketPct)} : ''"
+                        th:text="${v.marketPct != null} ? ${@fmt.pct(v.changePct - v.marketPct)} : '—'" title="stock change minus market change, in points"></td>
+                    <td class="num small"><span class="pos" th:text="${@fmt.price(v.targetPrice)}"></span> · <span class="neg" th:text="${@fmt.price(v.stopPrice)}"></span></td>
+                    <td class="num small" th:text="${v.status.name() == 'PENDING'} ? ${it.window} : ${v.left}"></td>
+                    <td class="small" style="white-space:normal;min-width:300px">
+                        <b th:text="${v.verdict}"></b>
+                        <details th:unless="${v.insights.isEmpty()}"><summary class="muted">Notes</summary>
+                            <ul class="howto" style="margin:4px 0 0"><li th:each="n : ${v.insights}" th:text="${n}"></li></ul>
+                            <div class="muted" th:if="${it.detail != null}" th:text="'Why it was flagged: ' + ${it.detail}"></div>
+                        </details>
+                        <div class="muted" th:if="${it.note != null}" th:text="'Your note: ' + ${it.note}"></div>
+                    </td>
+                    <td style="white-space:nowrap">
+                        <a class="btn sm" th:href="@{/journal/new(symbol=${it.symbol}, rule=${'Watchlist · ' + v.source.title}, stop=${#numbers.formatDecimal(v.stopPrice, 1, 2)},
+                            target=${#numbers.formatDecimal(v.targetPrice, 1, 2)}, price=${#numbers.formatDecimal(v.entry != null ? v.entry : v.lastClose, 1, 2)})}">Log buy</a>
+                        <form method="post" th:action="@{/watchlist/{id}/archive(id=${it.id})}" style="display:inline">
+                            <input type="hidden" name="archived" th:value="${!it.archived}">
+                            <button class="btn sm" type="submit" th:text="${it.archived} ? 'Restore' : 'Archive'"></button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- scorecards -->
+    <section class="card block">
+        <h2>Is each setup delivering?</h2>
+        <p class="sub">Live results of the watchlist so far, next to what the same setup did in its backtest's out-of-sample period with the same plan.
+            Winners close quickly at the target while losers stay open until the stop or the time limit, so early closed results look better than they are:
+            the verdict counts the open positions at their current value too, and waits for at least 20 closed trades.</p>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Setup</th><th class="num">Signals</th><th class="num">Active</th><th class="num">Closed</th><th class="num">Won</th>
+                    <th class="num">Avg net</th><th class="num">Open now</th><th>Backtest (out-of-sample)</th><th>Verdict</th></tr></thead>
+                <tbody>
+                <tr th:each="c : ${b.scorecards}">
+                    <td><a th:href="@{${c.source.href}}" th:text="${c.source.title}"></a> <small class="muted" th:text="${c.source.page}"></small></td>
+                    <td class="num" th:text="${c.signals}"></td>
+                    <td class="num" th:text="${c.active}"></td>
+                    <td class="num" th:text="${c.closed}"></td>
+                    <td class="num" th:text="${c.closed > 0} ? ${c.wins} + ' (' + ${@fmt.decimal(c.winRate, 0)} + '%)' : '—'"></td>
+                    <td class="num" th:classappend="${c.closed > 0} ? ${@fmt.tone(c.avgNetPct)} : ''" th:text="${c.closed > 0} ? ${@fmt.pct(c.avgNetPct)} : '—'"></td>
+                    <td class="num" th:classappend="${c.open > 0} ? ${@fmt.tone(c.openAvgPct)} : ''" th:text="${c.open > 0} ? ${@fmt.pct(c.openAvgPct)} + ' (' + ${c.open} + ')' : '—'"></td>
+                    <td class="small muted" th:text="${c.backtest}"></td>
+                    <td class="small" style="white-space:normal;min-width:220px" th:text="${c.verdict}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- closed -->
+    <section class="card block">
+        <h2>Closed <span class="muted small" th:text="${b.closed.size()}"></span></h2>
+        <p th:if="${b.closed.isEmpty()}" class="muted">Nothing closed yet. Items close when they hit the target or the stop, or run out of sessions.</p>
+        <div class="table-wrap" style="max-height:520px;overflow-y:auto" th:unless="${b.closed.isEmpty()}">
+            <table>
+                <thead><tr><th>Stock</th><th>Setup</th><th>Triggered</th><th>Bought → sold</th><th class="num">Entry → exit</th><th class="num">Days</th>
+                    <th class="num">Net</th><th class="num">vs market</th><th>Outcome</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="v : ${b.closed}" th:with="it=${v.item}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${it.symbol})}" th:text="${it.symbol}"></a><small th:text="${it.sector}"></small></td>
+                    <td class="small" th:text="${v.source.title}"></td>
+                    <td class="small" th:text="${it.signalDate}"></td>
+                    <td class="small" th:text="${v.entryDate} + ' → ' + ${v.exitDate}"></td>
+                    <td class="num small" th:text="${@fmt.price(v.entry)} + ' → ' + ${@fmt.price(v.exit)}"></td>
+                    <td class="num" th:text="${v.held}"></td>
+                    <td class="num" th:classappend="${@fmt.tone(v.netPct)}"><b th:text="${@fmt.pct(v.netPct)}"></b></td>
+                    <td class="num small" th:classappend="${@fmt.tone(v.changePct - v.marketPct)}" th:text="${@fmt.pct(v.changePct - v.marketPct)}"></td>
+                    <td class="small" style="white-space:normal;min-width:240px"><span class="pill" th:classappend="${v.status.tone}" th:text="${v.status.label}"></span>
+                        <span th:text="${v.verdict}"></span></td>
+                    <td>
+                        <form method="post" th:action="@{/watchlist/{id}/archive(id=${it.id})}" style="display:inline">
+                            <input type="hidden" name="archived" th:value="${!it.archived}">
+                            <button class="btn sm" type="submit" th:text="${it.archived} ? 'Restore' : 'Archive'"></button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- add -->
+    <section class="card block">
+        <h2>Add a stock</h2>
+        <p class="sub">Starts from the latest close, as if it triggered today: the plan's entry is the next open.</p>
+        <form method="post" th:action="@{/watchlist/add}" class="inline" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+            <label class="small">Symbol<br><input name="symbol" list="symbols" required style="text-transform:uppercase;width:110px"></label>
+            <datalist id="symbols"><option th:each="s : ${b.symbols}" th:value="${s}"></option></datalist>
+            <label class="small">Target %<br><input name="target" type="number" step="0.5" min="1" th:value="${defaultTarget}" style="width:80px"></label>
+            <label class="small">Stop %<br><input name="stop" type="number" step="0.5" min="1" th:value="${defaultStop}" style="width:80px"></label>
+            <label class="small">Sessions<br><input name="window" type="number" min="3" max="120" th:value="${defaultWindow}" style="width:80px"></label>
+            <label class="small" style="flex:1;min-width:220px">Why you are watching it<br><input name="note" maxlength="500" style="width:100%"></label>
+            <button class="btn primary" type="submit">Add</button>
+        </form>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

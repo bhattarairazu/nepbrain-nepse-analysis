@@ -59,7 +59,7 @@ public class BaseBreakoutService {
                         LocalDate entryDate, double entry, LocalDate exitDate, double exit, String reason, double netPct, boolean design) {}
 
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, LocalDate lastDay, List<Base> breaking,
-                         List<Base> ready, List<Base> forming, List<Row> rows, List<Event> recent) {}
+                         List<Base> ready, List<Base> forming, List<Row> rows, List<Event> recent, List<WatchSignal> signals) {}
 
     private final BacktestService backtest;
     private final BacktestRepository store;
@@ -84,6 +84,7 @@ public class BaseBreakoutService {
         List<List<double[]>> rets = new ArrayList<>();
         for (int k = 0; k < kinds.length * Exit.values().length; k++) rets.add(new ArrayList<>());
         List<Event> recent = new ArrayList<>();
+        List<WatchSignal> signals = new ArrayList<>();
 
         for (Series s : m.series.values()) {
             if (!Sectors.isEquity(s.sector) || s.size() < SQUEEZE_LOOKBACK + 10) continue;
@@ -112,6 +113,11 @@ public class BaseBreakoutService {
                     hits.add(3);
                 }
                 if (hits.isEmpty()) continue;
+                if (s.globalIndex[i] >= T - WatchSignal.RECENT_SESSIONS && (hits.contains(0) || hits.contains(2))) {
+                    signals.add(new WatchSignal(hits.contains(0) ? "BASE_BREAKOUT" : "BASE_COILING", s.symbol, s.sector, s.dates[i], s.close[i],
+                            b.score(), String.format(Locale.ROOT, "base %.1f → %.1f (%.0f%% range), score %d: %s", b.baseLow(), b.baseHigh(),
+                            b.depthPct(), b.score(), String.join(", ", b.reasons()))));
+                }
                 boolean design = s.globalIndex[i] < split;
                 for (Exit x : Exit.values()) {
                     Outcome o = BreakoutPullbackService.outcome(s, i, x);
@@ -144,7 +150,7 @@ public class BaseBreakoutService {
                 today.stream().filter(b -> b.phase() == Phase.BREAKOUT).toList(),
                 today.stream().filter(b -> b.phase() == Phase.READY).toList(),
                 today.stream().filter(b -> b.phase() == Phase.BASE).limit(40).toList(),
-                rows, recent.stream().limit(60).toList());
+                rows, recent.stream().limit(60).toList(), signals);
         cachedFor = last;
         save(cached, kinds);
         return Optional.of(cached);

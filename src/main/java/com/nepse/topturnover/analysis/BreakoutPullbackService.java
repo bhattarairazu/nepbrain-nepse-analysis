@@ -85,7 +85,7 @@ public class BreakoutPullbackService {
                         double fromLevelPct, String state) {}
 
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, int breakouts, int pullbacks, int retests,
-                         int turns, List<Row> rows, List<Account> accounts, List<Trade> recent, List<Setup> watch) {}
+                         int turns, List<Row> rows, List<Account> accounts, List<Trade> recent, List<Setup> watch, List<WatchSignal> signals) {}
 
     /** One breakout and the signal day (index into the series) of each entry type, -1 if it never came. */
     private static final class Event {
@@ -158,8 +158,18 @@ public class BreakoutPullbackService {
         }
         recent.sort(Comparator.comparing(Trade::signal).reversed());
 
+        List<WatchSignal> signals = new ArrayList<>();
+        for (Event ev : events) {
+            for (Entry e : List.of(Entry.PULLBACK, Entry.RETEST_TURN)) {
+                int i = ev.signal[e.ordinal()];
+                if (i < 0 || ev.s.globalIndex[i] < T - WatchSignal.RECENT_SESSIONS) continue;
+                signals.add(new WatchSignal(e == Entry.PULLBACK ? "PULLBACK_HOLD" : "RETEST_TURN", ev.s.symbol, ev.s.sector, ev.s.dates[i],
+                        ev.s.close[i], ev.rvol, String.format(Locale.ROOT, "breakout %s above %.1f on %.1f× volume", ev.s.dates[ev.b], ev.level, ev.rvol)));
+            }
+        }
+
         cached = new Result(m.dates[0], m.dates[split], last, T, events.size(), count(events, Entry.PULLBACK), count(events, Entry.RETEST),
-                count(events, Entry.RETEST_TURN), rows, accounts, recent.stream().limit(40).toList(), watch(m, events));
+                count(events, Entry.RETEST_TURN), rows, accounts, recent.stream().limit(40).toList(), watch(m, events), signals);
         cachedFor = last;
         save(cached);
         return Optional.of(cached);

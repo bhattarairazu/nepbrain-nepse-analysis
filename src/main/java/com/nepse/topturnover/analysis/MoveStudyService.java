@@ -98,7 +98,8 @@ public class MoveStudyService {
 
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, int stockDays, int designDays, int oosDays,
                          Stat designBase, Stat oosBase, List<Mover> movers, List<FeatureLift> lifts, List<RuleTest> rules,
-                         double scoreThreshold, List<Account> accounts, LocalDate lastDay, List<Candidate> candidates) {}
+                         double scoreThreshold, List<Account> accounts, LocalDate lastDay, List<Candidate> candidates,
+                         List<WatchSignal> signals) {}
 
     /** One liquid stock-day: its features and, when the future is known, what a trade from the next open did. */
     private static final class Row {
@@ -240,8 +241,18 @@ public class MoveStudyService {
         List<Candidate> cands = rows.stream().filter(r -> r.t == lt).sorted(Comparator.comparingDouble((Row r) -> r.score).reversed()).limit(12)
                 .map(r -> new Candidate(r.s.symbol, r.s.sector, r.s.close[r.i], r.score, r.score >= thr, notes(r))).toList();
 
+        // ---- recent signals for the watchlist: best 3 lift scores a day, best 5 stocks of a washout day
+        List<WatchSignal> signals = new ArrayList<>();
+        Map<Integer, List<Row>> recentDays = new HashMap<>();
+        for (Row r : rows) if (r.t >= T - WatchSignal.RECENT_SESSIONS) recentDays.computeIfAbsent(r.t, k -> new ArrayList<>()).add(r);
+        for (List<Row> day : recentDays.values()) {
+            day.sort(Comparator.comparingDouble((Row r) -> r.score).reversed());
+            day.stream().filter(topScore).limit(3).forEach(r -> signals.add(signal("MOVE_SCORE", r)));
+            day.stream().filter(washout).limit(5).forEach(r -> signals.add(signal("WASHOUT", r)));
+        }
+
         cached = new Result(m.dates[0], m.dates[split], last, T, labelled.size(), des.size(), oos.size(), stat(des), stat(oos), movers, lifts, rules,
-                thr, accounts, last, cands);
+                thr, accounts, last, cands, signals);
         cachedFor = last;
         save(cached);
         return Optional.of(cached);
@@ -397,6 +408,11 @@ public class MoveStudyService {
             case RVOL, CLOSE_IN_RANGE, UPPER_WICK, BB_PCTB, LOG_PRICE -> String.format(Locale.ROOT, "%.2f", v);
             default -> String.format(Locale.ROOT, "%.1f%%", v * 100);
         };
+    }
+
+    private static WatchSignal signal(String source, Row r) {
+        return new WatchSignal(source, r.s.symbol, r.s.sector, r.s.dates[r.i], r.s.close[r.i], r.score,
+                String.format(Locale.ROOT, "lift score %.2f: %s", r.score, String.join(", ", notes(r))));
     }
 
     private static List<String> notes(Row r) {
