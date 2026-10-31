@@ -96,6 +96,11 @@ public class MoveStudyService {
 
     public record Candidate(String symbol, String sector, double close, double score, boolean qualifies, List<String> notes) {}
 
+    public record PastSignal(LocalDate date, double score, boolean moved, double netPct) {}
+
+    public record StockMoves(Double scoreToday, boolean qualifies, int rankToday, int stocksToday, List<String> notes, int moves,
+                             int liquidDays, double moveRatePct, double baseRatePct, double threshold, List<PastSignal> topScoreDays) {}
+
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, int stockDays, int designDays, int oosDays,
                          Stat designBase, Stat oosBase, List<Mover> movers, List<FeatureLift> lifts, List<RuleTest> rules,
                          double scoreThreshold, List<Account> accounts, LocalDate lastDay, List<Candidate> candidates,
@@ -122,6 +127,8 @@ public class MoveStudyService {
     private final TradeCosts costs;
     private final BacktestRepository store;
     private Result cached;
+    private List<Row> allRows = List.of();
+    private double cachedBase, cachedThr;
     private LocalDate cachedFor;
 
     public MoveStudyService(BacktestService backtest, TradeCosts costs, BacktestRepository store) {
@@ -253,9 +260,30 @@ public class MoveStudyService {
 
         cached = new Result(m.dates[0], m.dates[split], last, T, labelled.size(), des.size(), oos.size(), stat(des), stat(oos), movers, lifts, rules,
                 thr, accounts, last, cands, signals);
+        allRows = rows;
+        cachedBase = (base * des.size() + oosBase * oos.size()) / (des.size() + oos.size());
+        cachedThr = thr;
         cachedFor = last;
         save(cached);
         return Optional.of(cached);
+    }
+
+    /** The stock in the move study: today's lift score and rank, how often it moved, and its past top-score days. */
+    public synchronized Optional<StockMoves> stock(String symbol) {
+        if (run().isEmpty()) return Optional.empty();
+        int lt = allRows.stream().mapToInt(r -> r.t).max().orElse(-1);
+        List<Row> today = allRows.stream().filter(r -> r.t == lt).sorted(Comparator.comparingDouble((Row r) -> r.score).reversed()).toList();
+        Row mine = null;
+        int rank = 0;
+        for (int k = 0; k < today.size(); k++) if (today.get(k).s.symbol.equals(symbol)) { mine = today.get(k); rank = k + 1; }
+        List<Row> rows = allRows.stream().filter(r -> r.s.symbol.equals(symbol)).toList();
+        if (rows.isEmpty()) return Optional.empty();
+        List<Row> lab = rows.stream().filter(r -> r.labelled).toList();
+        int moves = (int) lab.stream().filter(r -> r.success).count();
+        List<PastSignal> top = lab.stream().filter(r -> r.score >= cachedThr).sorted(Comparator.comparingInt((Row r) -> r.t).reversed()).limit(15)
+                .map(r -> new PastSignal(r.s.dates[r.i], r.score, r.success, r.ret * 100)).toList();
+        return Optional.of(new StockMoves(mine == null ? null : mine.score, mine != null && mine.score >= cachedThr, rank, today.size(),
+                mine == null ? List.of() : notes(mine), moves, lab.size(), lab.isEmpty() ? 0 : 100.0 * moves / lab.size(), cachedBase * 100, cachedThr, top));
     }
 
     // ------------------------------------------------------------------ features and labels

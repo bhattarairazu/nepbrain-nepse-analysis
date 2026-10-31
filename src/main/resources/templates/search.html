@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Search')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1 th:text="'Search: ' + ${q}"></h1>
+            <p th:text="${hits.isEmpty()} ? 'No stock matches. Try the symbol (NABIL) or part of the name (Nabil).' : ${hits.size()} + ' stocks match. Pick one for its full analysis.'"></p>
+        </div>
+    </div>
+    <section class="card block" th:unless="${hits.isEmpty()}">
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Symbol</th><th>Name</th><th>Sector</th></tr></thead>
+                <tbody>
+                <tr th:each="h : ${hits}">
+                    <td class="sym"><a th:href="@{/stock/{x}(x=${h.symbol})}" th:text="${h.symbol}"></a></td>
+                    <td th:text="${h.name}"></td>
+                    <td class="muted" th:text="${h.sector}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

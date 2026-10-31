@@ -317,3 +317,9 @@ td.why span::before { content: "• "; }
 .grid-2 > *, .journal-groups > *, .tiles > * { min-width: 0; }
 .grid-2 > *, .journal-groups > * { overflow-x: auto; }
 .scroll-x { overflow-x: auto; max-width: 100%; }
+
+/* top-bar stock search */
+.nav-search { margin-left: auto; }
+.nav-search input { width: 190px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
+.nav-search input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+@media (max-width: 700px) { .nav-search { width: 100%; } .nav-search input { width: 100%; } }

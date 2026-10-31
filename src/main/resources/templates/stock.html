@@ -69,11 +69,15 @@
             </ul>
         </section>
 
+        <th:block th:replace="~{fragments/stock-report :: summary}"></th:block>
+
         <section class="card">
             <h2>Price and turnover</h2>
             <p class="sub">Line: close · bars: turnover (darker when the stock was in the top-20 turnover list)</p>
             <div class="chart-box"><canvas id="stockChart"></canvas></div>
         </section>
+
+        <th:block th:replace="~{fragments/stock-report :: details}"></th:block>
 
         <section class="card" style="margin-top:16px">
             <h2>Daily history</h2>

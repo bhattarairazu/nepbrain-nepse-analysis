@@ -180,6 +180,13 @@ public class WatchlistService {
         return new Board(lastDay, today, active, closed, scorecards(views), added, symbols);
     }
 
+    /** All watchlist items of one stock (archived too), evaluated, newest signal first. */
+    public List<View> forSymbol(String symbol) {
+        capture();
+        Market m = backtest.data();
+        return repo.all().stream().filter(it -> it.symbol().equals(symbol)).map(it -> evaluate(m, it)).toList();
+    }
+
     /** Follows one item through the stored prices with the backtests' plan. */
     private View evaluate(Market m, Item it) {
         Source src = Source.of(it.source());

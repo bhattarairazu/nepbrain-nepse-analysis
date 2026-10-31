@@ -19,6 +19,7 @@ import com.nepse.topturnover.analysis.AnalysisModels.MarketDay;
 import com.nepse.topturnover.analysis.AnalysisService;
 import com.nepse.topturnover.analysis.FeatureService;
 import com.nepse.topturnover.analysis.InsightService;
+import com.nepse.topturnover.analysis.StockReportService;
 import com.nepse.topturnover.analysis.Signal;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.repository.MarketDataRepository;
@@ -34,10 +35,12 @@ public class DashboardController {
     private final InsightService insights;
     private final FeatureService features;
     private final HistoryService history;
+    private final StockReportService reports;
 
     public DashboardController(AnalysisService analysis, MarketDataRepository repo, CrawlService crawlService, NepseProperties props,
-                               InsightService insights, FeatureService features, HistoryService history) {
+                               InsightService insights, FeatureService features, HistoryService history, StockReportService reports) {
         this.history = history;
+        this.reports = reports;
         this.analysis = analysis;
         this.insights = insights;
         this.features = features;
@@ -116,6 +119,11 @@ public class DashboardController {
                 m.put("inTop", d.turnoverRank() != null);
                 return m;
             }).toList());
+            try {
+                model.addAttribute("rep", reports.report(s.symbol()));
+            } catch (RuntimeException e) {
+                model.addAttribute("repError", e.getMessage());
+            }
         });
         return "stock";
     }

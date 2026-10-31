@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -64,6 +65,8 @@ public class BaseBreakoutService {
     private final BacktestService backtest;
     private final BacktestRepository store;
     private Result cached;
+    private Map<String, Base> current = Map.of();
+    private List<Event> allEvents = List.of();
     private LocalDate cachedFor;
 
     public BaseBreakoutService(BacktestService backtest, BacktestRepository store) {
@@ -151,9 +154,23 @@ public class BaseBreakoutService {
                 today.stream().filter(b -> b.phase() == Phase.READY).toList(),
                 today.stream().filter(b -> b.phase() == Phase.BASE).limit(40).toList(),
                 rows, recent.stream().limit(60).toList(), signals);
+        current = today.stream().collect(java.util.stream.Collectors.toMap(Base::symbol, b -> b, (a, b) -> a));
+        allEvents = List.copyOf(recent);
         cachedFor = last;
         save(cached, kinds);
         return Optional.of(cached);
+    }
+
+    /** The stock's sideways base at the latest close, if it is in one. */
+    public synchronized Optional<Base> current(String symbol) {
+        run();
+        return Optional.ofNullable(current.get(symbol));
+    }
+
+    /** The stock's past base breakouts and coiling signals with their outcomes, newest first. */
+    public synchronized List<Event> history(String symbol) {
+        run();
+        return allEvents.stream().filter(e -> e.symbol().equals(symbol)).toList();
     }
 
     /** The base ending the day before i, judged at the close of day i; null if the stock is not sideways or not liquid. */

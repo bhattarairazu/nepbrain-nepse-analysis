@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -68,6 +69,8 @@ public class BigPlayerService {
 
     public record Row(Stage stage, Exit exit, Stat design, Stat oos) {}
 
+    public record StageEvent(String symbol, LocalDate date, Stage stage, int score, Double netPct, String exit) {}
+
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, LocalDate lastDay, List<Footprint> quiet,
                          List<Footprint> markup, List<Footprint> pumped, List<Row> rows, int floorsheetDays, LocalDate floorsheetFrom,
                          LocalDate floorsheetTo, List<BrokerFootprint> brokerQuiet, List<BrokerFootprint> brokerMoving,
@@ -77,6 +80,8 @@ public class BigPlayerService {
     private final BrokerAnalysisService brokers;
     private final BacktestRepository store;
     private Result cached;
+    private Map<String, Footprint> todayAll = Map.of();
+    private List<StageEvent> stageEvents = List.of();
     private LocalDate cachedFor;
     private int cachedFloorsheetDays = -1;
 
@@ -96,6 +101,7 @@ public class BigPlayerService {
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
         List<Footprint> today = new ArrayList<>();
         List<WatchSignal> signals = new ArrayList<>();
+        List<StageEvent> events = new ArrayList<>();
         int stages = Stage.values().length, exits = Exit.values().length;
         List<List<double[]>> rets = new ArrayList<>();
         for (int k = 0; k < stages * exits; k++) rets.add(new ArrayList<>());
@@ -116,6 +122,8 @@ public class BigPlayerService {
                             "big-player footprint " + f.score() + ": " + String.join(", ", f.reasons())));
                 }
                 boolean design = g < split;
+                Outcome first = BreakoutPullbackService.outcome(s, i, Exit.SHORT);
+                events.add(new StageEvent(s.symbol, s.dates[i], f.stage(), f.score(), first == null ? null : first.ret() * 100, first == null ? null : first.reason()));
                 for (Exit x : Exit.values()) {
                     Outcome o = BreakoutPullbackService.outcome(s, i, x);
                     if (o != null) rets.get(f.stage().ordinal() * exits + x.ordinal()).add(new double[] {design ? 1 : 0, o.ret() * 100, o.hit() ? 1 : 0, g});
@@ -168,10 +176,25 @@ public class BigPlayerService {
                 today.stream().filter(f -> f.stage() == Stage.PUMPED).sorted(byScore).toList(),
                 rows, fsDays.size(), fsDays.isEmpty() ? null : fsDays.get(fsDays.size() - 1), fsDays.isEmpty() ? null : fsDays.get(0),
                 bQuiet, bMoving, bTurning, bOperator, signals);
+        todayAll = today.stream().collect(java.util.stream.Collectors.toMap(Footprint::symbol, f -> f, (a, b) -> a));
+        events.sort(Comparator.comparing(StageEvent::date).reversed());
+        stageEvents = events;
         cachedFor = last;
         cachedFloorsheetDays = fsDays.size();
         save(cached);
         return Optional.of(cached);
+    }
+
+    /** The stock's footprint at the latest close (null stage = no big-player stage). */
+    public synchronized Optional<Footprint> today(String symbol) {
+        run();
+        return Optional.ofNullable(todayAll.get(symbol));
+    }
+
+    /** The stock's past stage signals, newest first. */
+    public synchronized List<StageEvent> history(String symbol) {
+        run();
+        return stageEvents.stream().filter(e -> e.symbol().equals(symbol)).toList();
     }
 
     // ------------------------------------------------------------------ price and volume footprint

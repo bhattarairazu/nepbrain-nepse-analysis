@@ -7,6 +7,7 @@
     <link rel="stylesheet" th:href="@{/css/app.css}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
     <script th:src="@{/js/stock-popover.js}" defer></script>
+    <script th:src="@{/js/search.js}" defer></script>
 </head>
 <body>
 
@@ -35,6 +36,10 @@
         <a th:href="@{/journal}" th:classappend="${active == 'journal'} ? 'on'">Journal</a>
         <a th:href="@{/crawl}" th:classappend="${active == 'crawl'} ? 'on'">Data</a>
     </nav>
+    <form class="nav-search" method="get" th:action="@{/search}" role="search" th:attr="data-symbols=@{/api/symbols}">
+        <input name="q" list="nav-symbols" placeholder="Search stock…" autocomplete="off" aria-label="Search a stock by symbol or name" required>
+        <datalist id="nav-symbols"></datalist>
+    </form>
 </header>
 
 <form th:fragment="sessionPicker(path, current)" class="inline" method="get" th:action="@{${path}}" th:if="${sessions != null and !sessions.isEmpty()}">

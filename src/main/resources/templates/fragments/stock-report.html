@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!-- Summary across every study (top of the stock page) -->
+<th:block th:fragment="summary">
+    <div class="note" th:if="${repError != null}" th:text="'The full analysis could not be built: ' + ${repError}"></div>
+    <section class="card block" th:if="${rep != null}">
+        <div class="page-head" style="margin-bottom:6px">
+            <div><h2>What every study says</h2>
+                <p class="sub" style="margin:4px 0 0">One line from each analysis in the app, at the latest close. Details are further down.</p></div>
+            <form method="post" th:action="@{/watchlist/add}" style="display:flex;gap:6px;align-items:center">
+                <input type="hidden" name="symbol" th:value="${rep.symbol}">
+                <input name="note" placeholder="Why you are watching it" maxlength="500" style="width:200px">
+                <button class="btn sm" type="submit">+ Watchlist</button>
+                <a class="btn sm" th:href="@{/journal/new(symbol=${rep.symbol})}">Log a buy</a>
+            </form>
+        </div>
+        <table>
+            <tbody>
+            <tr th:each="p : ${rep.summary}">
+                <td style="width:130px;vertical-align:top"><span class="pill" th:classappend="${p.tone}" th:text="${p.topic}"></span></td>
+                <td style="white-space:normal" th:text="${p.text}"></td>
+            </tr>
+            </tbody>
+        </table>
+        <p class="small muted" style="margin:10px 0 0">Context: on the stored history none of these setups beat charges, tax and T+2 settlement on the out-of-sample period
+            (see each study's backtest). Use them to decide what to look at, not as buy signals.</p>
+    </section>
+</th:block>
+
+<!-- Detailed sections (below the chart) -->
+<th:block th:fragment="details">
+    <th:block th:if="${rep != null}">
+
+        <!-- big players -->
+        <section class="card block" style="margin-top:16px">
+            <h2><a th:href="@{/players}">Big players</a></h2>
+            <p th:if="${rep.footprint == null}" class="muted">Not liquid enough for a footprint (needs Rs 50 lakh+ average turnover over 60 sessions).</p>
+            <div class="tiles" th:if="${rep.footprint != null}" th:with="f=${rep.footprint}" style="margin-top:8px">
+                <div class="card tile"><div class="k">Stage</div>
+                    <div class="v"><span class="pill" th:classappend="${f.stage != null} ? ${f.stage.tone} : ''" th:text="${f.stage != null} ? ${f.stage.title} : 'None'"></span></div>
+                    <div class="s" th:text="'footprint ' + ${f.score} + ' / 100'"></div></div>
+                <div class="card tile"><div class="k">Trade size vs normal</div><div class="v" th:text="${@fmt.ratio(f.bigTicket)}"></div>
+                    <div class="s" th:text="'avg trade ' + ${@fmt.money(f.avgTradeSize)} + ', last 5 sessions'"></div></div>
+                <div class="card tile"><div class="k">Turnover vs normal</div><div class="v" th:text="${@fmt.ratio(f.turnoverSurge)}"></div>
+                    <div class="s" th:text="'normal ' + ${@fmt.money(f.avgTurnover)} + ' a day'"></div></div>
+                <div class="card tile"><div class="k">10 · 20 sessions</div>
+                    <div class="v"><span th:classappend="${@fmt.tone(f.ret10Pct)}" th:text="${@fmt.pct(f.ret10Pct)}"></span></div>
+                    <div class="s" th:text="${@fmt.pct(f.ret20Pct)} + ' in 20 · circuit ↑' + ${f.circuitUps} + ' ↓' + ${f.circuitDowns}"></div></div>
+            </div>
+            <p class="small" th:if="${rep.footprint != null and !rep.footprint.reasons.isEmpty()}" th:text="${#strings.listJoin(rep.footprint.reasons, ' · ')}"></p>
+            <h4 th:unless="${rep.stageHistory.isEmpty()}">Past stages (buy at the next open, +7% / −5% / 10 sessions)</h4>
+            <div class="scroll-x" th:unless="${rep.stageHistory.isEmpty()}">
+                <table>
+                    <thead><tr><th>Date</th><th>Stage</th><th class="num">Footprint</th><th class="num">Net</th><th>Exit</th></tr></thead>
+                    <tbody>
+                    <tr th:each="e : ${rep.stageHistory}">
+                        <td th:text="${e.date}"></td>
+                        <td><span class="pill" th:classappend="${e.stage.tone}" th:text="${e.stage.title}"></span></td>
+                        <td class="num" th:text="${e.score}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(e.netPct)}" th:text="${e.netPct != null} ? ${@fmt.pct(e.netPct)} : 'open'"></td>
+                        <td class="small muted" th:text="${e.exit != null} ? ${e.exit} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- floorsheet -->
+        <section class="card block">
+            <h2><a th:href="@{/brokers(sessions=20, symbol=${rep.symbol})}">Brokers (floorsheet)</a></h2>
+            <p th:if="${rep.brokers == null}" class="muted">No floorsheet collected yet (Brokers → collect, once a day after the close).</p>
+            <th:block th:if="${rep.brokers != null}">
+                <p class="sub" th:text="${rep.brokers.days.size()} + ' collected session(s)' + (${rep.brokers.days.isEmpty()} ? '' : ': ' + ${rep.brokers.days[rep.brokers.days.size() - 1]} + ' → ' + ${rep.brokers.days[0]}) + '.'"></p>
+                <p th:if="${rep.brokers.flow != null}">
+                    <span class="pill" th:each="g : ${rep.brokers.flow.signals}" th:classappend="${g.tone}" th:text="${g.label}" style="margin-right:4px"></span>
+                    <span th:text="'Top 3 net buyers ' + ${@fmt.decimal(rep.brokers.flow.top3NetBuyShare * 100, 0)} + '% of volume, top 3 net sellers '
+                        + ${@fmt.decimal(rep.brokers.flow.top3NetSellShare * 100, 0)} + '%, self-trades ' + ${@fmt.decimal(rep.brokers.flow.selfShare * 100, 0)} + '%.'"></span>
+                </p>
+                <div class="grid-2" th:unless="${rep.topBuyers.isEmpty() and rep.topSellers.isEmpty()}">
+                    <div th:each="side : ${ { {'Top net buyers', rep.topBuyers}, {'Top net sellers', rep.topSellers} } }">
+                        <h4 th:text="${side[0]}"></h4>
+                        <table>
+                            <thead><tr><th>Broker</th><th class="num">Net qty</th><th class="num">Avg buy</th><th class="num">Days net buying</th></tr></thead>
+                            <tbody>
+                            <tr th:each="b : ${side[1]}">
+                                <td><a th:href="@{/brokers(sessions=20, broker=${b.broker})}" th:text="'Broker ' + ${b.broker}"></a></td>
+                                <td class="num" th:classappend="${@fmt.tone(b.netQty())}" th:text="${@fmt.count(b.netQty())}"></td>
+                                <td class="num" th:text="${@fmt.price(b.avgBuy())}"></td>
+                                <td class="num" th:text="${b.daysNetBuying} + ' / ' + ${b.daysActive}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </th:block>
+        </section>
+
+        <!-- sideways base -->
+        <section class="card block">
+            <h2><a th:href="@{/bases}">Sideways base</a></h2>
+            <p th:if="${rep.base == null}" class="muted">Not in a sideways base at the latest close (30 sessions within a 15% range, drift ≤ 8%, Rs 50 lakh+ average turnover).</p>
+            <th:block th:if="${rep.base != null}" th:with="b=${rep.base}">
+                <p><span class="pill good" th:text="${b.phase.title}"></span> <b th:text="'score ' + ${b.score}"></b>
+                    <span th:text="': ' + ${#strings.listJoin(b.reasons, ' · ')}"></span></p>
+                <div class="scroll-x"><table>
+                    <thead><tr><th class="num">Base low → high</th><th class="num">Range</th><th class="num">To high</th><th class="num">Squeeze</th>
+                        <th class="num">Up/down vol</th><th class="num">Vol today</th><th class="num">Vol 10d</th><th class="num">Turnover 5d</th></tr></thead>
+                    <tbody><tr>
+                        <td class="num" th:text="${@fmt.price(b.baseLow)} + ' → ' + ${@fmt.price(b.baseHigh)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(b.depthPct, 1)} + '%'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(b.toHighPct)}" th:text="${@fmt.pct(b.toHighPct)}"></td>
+                        <td class="num" th:text="${@fmt.decimal(b.squeezePct, 0)} + '%'"></td>
+                        <td class="num" th:text="${@fmt.decimal(b.upDownVolume, 2)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(b.rvol)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(b.dryUp)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(b.turnoverTrend)}"></td>
+                    </tr></tbody>
+                </table></div>
+            </th:block>
+            <h4 th:unless="${rep.baseHistory.isEmpty()}">Past base signals</h4>
+            <div class="scroll-x" th:unless="${rep.baseHistory.isEmpty()}">
+                <table>
+                    <thead><tr><th>Signal</th><th>Setup</th><th class="num">Score</th><th class="num">Range</th><th>Bought → sold</th><th class="num">Net</th><th>Exit</th></tr></thead>
+                    <tbody>
+                    <tr th:each="e : ${rep.baseHistory}">
+                        <td th:text="${e.signal}"></td>
+                        <td class="small" th:text="${e.kind}"></td>
+                        <td class="num" th:text="${e.score}"></td>
+                        <td class="num" th:text="${@fmt.decimal(e.baseDepthPct, 1)} + '%'"></td>
+                        <td class="small" th:text="${e.entryDate} + ' → ' + ${e.exitDate}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(e.netPct)}" th:text="${@fmt.pct(e.netPct)}"></td>
+                        <td class="small muted" th:text="${e.reason}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- breakouts -->
+        <section class="card block">
+            <h2><a th:href="@{/pullback}">Breakouts and pullbacks</a></h2>
+            <p th:if="${rep.breakouts.isEmpty()}" class="muted">No close above the 20-day high on 1.5× volume with Rs 1 Cr+ traded in the stored history.</p>
+            <div class="scroll-x" th:unless="${rep.breakouts.isEmpty()}">
+                <table>
+                    <thead><tr><th>Breakout</th><th class="num">Level</th><th class="num">Volume</th><th>Pullback</th><th>Real retest</th><th>Turn up</th>
+                        <th class="num">Pullback trade</th><th>Now</th></tr></thead>
+                    <tbody>
+                    <tr th:each="b : ${rep.breakouts}">
+                        <td th:text="${b.breakout}"></td>
+                        <td class="num" th:text="${@fmt.price(b.level)}"></td>
+                        <td class="num" th:text="${@fmt.ratio(b.rvol)}"></td>
+                        <td class="small" th:text="${b.pullback != null} ? ${b.pullback} : '—'"></td>
+                        <td class="small" th:text="${b.retest != null} ? ${b.retest} : '—'"></td>
+                        <td class="small" th:text="${b.turn != null} ? ${b.turn} : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(b.pullbackNetPct)}"
+                            th:text="${b.pullbackNetPct != null} ? ${@fmt.pct(b.pullbackNetPct)} + ' (' + ${b.pullbackExit} + ')' : (${b.pullback != null} ? 'open' : '—')"></td>
+                        <td class="small" th:text="${b.state != null} ? ${b.state} : ''"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- move study -->
+        <section class="card block" th:if="${rep.moves != null}" th:with="mv=${rep.moves}">
+            <h2><a th:href="@{/moves}">Move study</a></h2>
+            <div class="tiles" style="margin-top:8px">
+                <div class="card tile"><div class="k">Lift score today</div>
+                    <div class="v" th:text="${mv.scoreToday != null} ? ${@fmt.decimal(mv.scoreToday, 2)} : '—'"></div>
+                    <div class="s" th:text="${mv.scoreToday != null} ? 'rank ' + ${mv.rankToday} + ' of ' + ${mv.stocksToday} + ' · threshold ' + ${@fmt.decimal(mv.threshold, 2)} : 'not liquid enough today'"></div></div>
+                <div class="card tile"><div class="k">Tradeable +7% moves</div>
+                    <div class="v" th:text="${mv.moves} + ' / ' + ${mv.liquidDays}"></div>
+                    <div class="s" th:text="${@fmt.decimal(mv.moveRatePct, 0)} + '% of its liquid days · all stocks ' + ${@fmt.decimal(mv.baseRatePct, 0)} + '%'"></div></div>
+            </div>
+            <p class="small" th:unless="${mv.notes.isEmpty()}" th:text="'Today: ' + ${#strings.listJoin(mv.notes, ' · ')}"></p>
+            <h4 th:unless="${mv.topScoreDays.isEmpty()}">Past days with a top lift score</h4>
+            <div class="scroll-x" th:unless="${mv.topScoreDays.isEmpty()}">
+                <table>
+                    <thead><tr><th>Date</th><th class="num">Score</th><th>Moved +7%?</th><th class="num">Net</th></tr></thead>
+                    <tbody>
+                    <tr th:each="p : ${mv.topScoreDays}">
+                        <td th:text="${p.date}"></td>
+                        <td class="num" th:text="${@fmt.decimal(p.score, 2)}"></td>
+                        <td><span class="pill" th:classappend="${p.moved} ? 'good' : 'bad'" th:text="${p.moved} ? 'yes' : 'no'"></span></td>
+                        <td class="num" th:classappend="${@fmt.tone(p.netPct)}" th:text="${@fmt.pct(p.netPct)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- watchlist -->
+        <section class="card block">
+            <h2><a th:href="@{/watchlist}">Watchlist</a></h2>
+            <p th:if="${rep.watch.isEmpty()}" class="muted">Not on the watchlist. Use "+ Watchlist" above to follow it.</p>
+            <div class="scroll-x" th:unless="${rep.watch.isEmpty()}">
+                <table>
+                    <thead><tr><th>Triggered</th><th>Setup</th><th>Status</th><th class="num">Entry</th><th class="num">Change</th><th>How it is doing</th></tr></thead>
+                    <tbody>
+                    <tr th:each="v : ${rep.watch}">
+                        <td th:text="${v.item.signalDate}"></td>
+                        <td class="small" th:text="${v.source.title}"></td>
+                        <td><span class="pill" th:classappend="${v.status.tone}" th:text="${v.status.label}"></span></td>
+                        <td class="num small" th:text="${v.entry != null} ? ${@fmt.price(v.entry)} + ' · ' + ${v.entryDate} : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(v.changePct)}" th:text="${@fmt.pct(v.changePct)}"></td>
+                        <td class="small" style="white-space:normal;min-width:260px" th:text="${v.verdict}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- journal -->
+        <section class="card block">
+            <h2><a th:href="@{/journal}">Your trades</a></h2>
+            <p th:if="${rep.journal.isEmpty()}" class="muted">No trades in this stock in your journal.</p>
+            <div class="scroll-x" th:unless="${rep.journal.isEmpty()}">
+                <table>
+                    <thead><tr><th>Bought</th><th class="num">Qty</th><th class="num">Entry</th><th>Sold</th><th class="num">Exit</th><th class="num">Net (after tax)</th><th>Rule</th></tr></thead>
+                    <tbody>
+                    <tr th:each="j : ${rep.journal}" th:with="t=${j.t}">
+                        <td th:text="${t.entryDate}"></td>
+                        <td class="num" th:text="${@fmt.count(t.quantity)}"></td>
+                        <td class="num" th:text="${@fmt.price(t.entryPrice)}"></td>
+                        <td th:text="${t.isOpen()} ? 'open' : ${t.exitDate}"></td>
+                        <td class="num" th:text="${t.isOpen()} ? '—' : ${@fmt.price(t.exitPrice)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(j.netPct)}" th:text="${j.netPct != null} ? ${@fmt.pct(j.netPct)} + ' · Rs ' + ${@fmt.count(j.netPnl)} : '—'"></td>
+                        <td class="small" th:text="${t.rule}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+</th:block>
+
+</body>
+</html>

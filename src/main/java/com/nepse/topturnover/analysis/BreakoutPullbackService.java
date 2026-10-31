@@ -84,6 +84,10 @@ public class BreakoutPullbackService {
     public record Setup(String symbol, String sector, LocalDate breakout, double level, double rvol, double lastClose,
                         double fromLevelPct, String state) {}
 
+    /** One breakout of a stock: when each entry came, how the pullback entry did, and where it stands. */
+    public record BreakoutLine(LocalDate breakout, double level, double rvol, LocalDate pullback, LocalDate retest, LocalDate turn,
+                               String state, Double pullbackNetPct, String pullbackExit) {}
+
     public record Result(LocalDate from, LocalDate split, LocalDate to, int sessions, int breakouts, int pullbacks, int retests,
                          int turns, List<Row> rows, List<Account> accounts, List<Trade> recent, List<Setup> watch, List<WatchSignal> signals) {}
 
@@ -108,6 +112,7 @@ public class BreakoutPullbackService {
     private final TradeCosts costs;
     private final BacktestRepository store;
     private Result cached;
+    private List<Event> allEvents = List.of();
     private LocalDate cachedFor;
 
     public BreakoutPullbackService(BacktestService backtest, TradeCosts costs, BacktestRepository store) {
@@ -170,6 +175,7 @@ public class BreakoutPullbackService {
 
         cached = new Result(m.dates[0], m.dates[split], last, T, events.size(), count(events, Entry.PULLBACK), count(events, Entry.RETEST),
                 count(events, Entry.RETEST_TURN), rows, accounts, recent.stream().limit(40).toList(), watch(m, events), signals);
+        allEvents = events;
         cachedFor = last;
         save(cached);
         return Optional.of(cached);
@@ -303,15 +309,35 @@ public class BreakoutPullbackService {
             Series s = ev.s;
             int lastI = s.size() - 1;
             if (s.globalIndex[ev.b] < T - 15 || s.globalIndex[lastI] < T - 1) continue;
-            String state;
-            if (ev.signal[Entry.RETEST_TURN.ordinal()] >= 0) state = "retest + turn up";
-            else if (ev.signal[Entry.RETEST.ordinal()] >= 0) state = "real retest: wait for a turn up";
-            else if (ev.failed || s.close[lastI] < ev.level * 0.97) state = "failed: back below the level";
-            else if (ev.signal[Entry.PULLBACK.ordinal()] >= 0) state = "pulled back and holding";
-            else state = "above the level, no pullback yet";
-            out.add(new Setup(s.symbol, s.sector, s.dates[ev.b], ev.level, ev.rvol, s.close[lastI], (s.close[lastI] / ev.level - 1) * 100, state));
+            out.add(new Setup(s.symbol, s.sector, s.dates[ev.b], ev.level, ev.rvol, s.close[lastI], (s.close[lastI] / ev.level - 1) * 100, state(ev)));
         }
         out.sort(Comparator.comparing(Setup::breakout).reversed());
+        return out;
+    }
+
+    private static String state(Event ev) {
+        Series s = ev.s;
+        int lastI = s.size() - 1;
+        if (ev.signal[Entry.RETEST_TURN.ordinal()] >= 0) return "retest + turn up";
+        if (ev.signal[Entry.RETEST.ordinal()] >= 0) return "real retest: wait for a turn up";
+        if (ev.failed || s.close[lastI] < ev.level * 0.97) return "failed: back below the level";
+        if (ev.signal[Entry.PULLBACK.ordinal()] >= 0) return "pulled back and holding";
+        return "above the level, no pullback yet";
+    }
+
+    /** Every breakout of the stock, newest first. */
+    public synchronized List<BreakoutLine> history(String symbol) {
+        run();
+        List<BreakoutLine> out = new ArrayList<>();
+        for (Event ev : allEvents) {
+            if (!ev.s.symbol.equals(symbol)) continue;
+            int p = ev.signal[Entry.PULLBACK.ordinal()], q = ev.signal[Entry.RETEST.ordinal()], k = ev.signal[Entry.RETEST_TURN.ordinal()];
+            Outcome o = p < 0 ? null : outcome(ev.s, p, Exit.SHORT);
+            boolean recent = ev.s.size() - 1 - ev.b <= 15;
+            out.add(new BreakoutLine(ev.s.dates[ev.b], ev.level, ev.rvol, p < 0 ? null : ev.s.dates[p], q < 0 ? null : ev.s.dates[q],
+                    k < 0 ? null : ev.s.dates[k], recent ? state(ev) : null, o == null ? null : o.ret() * 100, o == null ? null : o.reason()));
+        }
+        out.sort(Comparator.comparing(BreakoutLine::breakout).reversed());
         return out;
     }
 
