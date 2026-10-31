@@ -1,47 +1,39 @@
-# Production image for Sunrise ERP. Builds the jar from source, so the droplet needs only Docker.
-# Build context is the repository root: docker compose build
+# Production image for NEPSE Top Turnover analysis. Builds the jar from source, so the server needs only Docker.
+# Build context is the repository root: docker compose up -d --build
 
 # ---- Build ----
-FROM eclipse-temurin:21-jdk AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 
 # Download dependencies first, so a code-only change reuses this layer.
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
-COPY core/pom.xml core/pom.xml
-COPY api-erp/pom.xml api-erp/pom.xml
-COPY logging/pom.xml logging/pom.xml
-#RUN #chmod +x mvnw && ./mvnw -B -q -pl api-erp -am dependency:go-offline -DskipTests || true
-# Download Maven dependencies
-#RUN mvn -q -e -DskipTests dependency:go-offline
+COPY pom.xml ./
+RUN mvn -B -q dependency:go-offline -DskipTests
 
-COPY core core
-COPY api-erp api-erp
-COPY logging logging
-# -Dexec.skip skips the bill-calc.js test, which needs Node (not in this image).
-RUN sh ./mvnw -B -pl api-erp -am package -DskipTests -Dexec.skip=true
+COPY src src
+RUN mvn -B -q package -DskipTests
 
 # ---- Run ----
 FROM eclipse-temurin:21-jre
-LABEL org.opencontainers.image.title="Sunrise ERP"
+LABEL org.opencontainers.image.title="NEPSE Top Turnover analysis"
 
 ENV TZ=Asia/Kathmandu \
-    SPRING_PROFILES_ACTIVE=prod \
-    JAVA_OPTS="" \
-    SERVER_PORT=8082
+    SERVER_PORT=8083 \
+    JAVA_OPTS=""
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl tzdata \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system erp && useradd --system --gid erp --home-dir /app erp \
-    && mkdir -p /app/data/files && chown -R erp:erp /app
+    && groupadd --system nepse && useradd --system --gid nepse --home-dir /app nepse \
+    && mkdir -p /app/config /app/logs && chown -R nepse:nepse /app
 
 WORKDIR /app
-COPY --from=build /src/api-erp/target/api-erp.jar /app/api-erp.jar
-USER erp
+COPY --from=build /src/target/nepse-topturnover.jar /app/nepse-topturnover.jar
+# Market holidays (read from config/holidays.txt relative to /app); compose can mount an edited copy over it.
+COPY --chown=nepse:nepse config/holidays.txt /app/config/holidays.txt
+USER nepse
 
-EXPOSE 8082
+EXPOSE 8083
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
-    CMD curl -fsS http://localhost:8082/actuator/health/liveness || exit 1
+    CMD curl -fsS "http://localhost:${SERVER_PORT}/actuator/health/liveness" || exit 1
 
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/api-erp.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/nepse-topturnover.jar"]

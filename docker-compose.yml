@@ -1,8 +1,11 @@
-# Sunrise ERP on a DigitalOcean droplet: the app only. MySQL is an existing server
-# (managed database or another droplet on the VPC); files stay on a local volume.
-# A web server on the host (nginx) terminates HTTPS and proxies to 127.0.0.1:8082.
+# NEPSE Top Turnover analysis on a server: the app only. MySQL is an existing server (managed database or another
+# droplet on the VPC). Settings and the database password live in .env next to this file (copy .env.example).
+#
+# The app has no login, so by default it listens on 127.0.0.1 only: put nginx (HTTPS + basic auth) in front of it.
+# Set APP_BIND=0.0.0.0 in .env only if you accept that anyone who finds the address can use it.
 #
 # From the repository root:
+#   cp .env.example .env    # then edit it
 #   docker compose up -d --build
 
 services:
@@ -10,56 +13,42 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-
-    container_name: nepbrain-nepse-analysis
-
+    container_name: nepse-topturnover
     restart: unless-stopped
 
     environment:
-      SPRING_PROFILES_ACTIVE: prod
-      # The app listens on 8082 inside the container (Spring's default is 8080).
-      SERVER_PORT: "8083"
+      SERVER_PORT: "${APP_PORT:-8083}"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://10.122.0.4:3306/nepbrain_nepse_analysis?useTimezone=true&serverTimezone=Asia/Kathmandu"
+      SPRING_DATASOURCE_USERNAME: "nepbrain"
+      SPRING_DATASOURCE_PASSWORD: "Nepbrain@10"
 
-      DB_URL: jdbc:mysql://10.122.0.4:3306/nepbrain_nepse_analysis?serverTimezone=UTC&characterEncoding=UTF-8&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true
-      DB_USERNAME: nepbrain
-      DB_PASSWORD: Nepbrain@10
+      # Daily price crawl and floorsheet collection (both on by default).
+      NEPSE_CRAWL_ENABLED: "${CRAWL_ENABLED:-true}"
+      NEPSE_FLOORSHEET_ENABLED: "${FLOORSHEET_ENABLED:-true}"
 
-      # Attachments and report exports, on the app-files volume.
-      ERP_STORAGE_ROOT: /app/data/files
-
-      # nginx in front: trust X-Forwarded-* for https, redirects and client IPs.
+      # nginx in front: trust X-Forwarded-* for https redirects and client IPs.
       SERVER_FORWARD_HEADERS_STRATEGY: native
-      # The prod session cookie is Secure (HTTPS only). Set false only while testing over plain http.
-      SERVER_SERVLET_SESSION_COOKIE_SECURE: ${COOKIE_SECURE:-false}
-
-      # No Zipkin server: keep trace ids in the logs, export nothing.
-      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.0"
-
       TZ: Asia/Kathmandu
-
-      JAVA_TOOL_OPTIONS: >
-        -Xms${JVM_XMS:-512m}
-        -Xmx${JVM_XMX:-1536m}
+      JAVA_TOOL_OPTIONS: >-
+        -Xms${JVM_XMS:-256m}
+        -Xmx${JVM_XMX:-1024m}
         -XX:+UseG1GC
         -XX:+ExitOnOutOfMemoryError
 
     volumes:
-      - app-files:/app/data
+      # Edit holidays on the server without rebuilding.
+      - ./config/holidays.txt:/app/config/holidays.txt:ro
+      - app-logs:/app/logs
 
     ports:
       - "8083:8083"
-#      - "127.0.0.1:${APP_PORT:-8082}:8082"
 
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -fsS http://localhost:8082/actuator/health/liveness || exit 1"
-        ]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${SERVER_PORT}/actuator/health/liveness || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 90s
+      start_period: 120s
 
     logging:
       driver: json-file
@@ -68,4 +57,4 @@ services:
         max-file: "5"
 
 volumes:
-  app-files:
+  app-logs:

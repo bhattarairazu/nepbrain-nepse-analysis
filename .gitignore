@@ -4,3 +4,4 @@ logs/
 config/application.properties
 scripts/mysql-setup.sql
 data/export/
+.env

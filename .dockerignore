@@ -1,0 +1,13 @@
+# Only pom.xml, src/ and config/holidays.txt are needed to build the image.
+.git
+.idea
+target
+logs
+data
+sql
+scripts
+*.md
+.env
+.env.*
+# Local settings with database credentials: never bake them into the image.
+config/application.properties

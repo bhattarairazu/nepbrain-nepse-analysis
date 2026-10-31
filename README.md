@@ -138,3 +138,20 @@ NEPSE_IT_DB_URL=jdbc:mysql://localhost:3306/nepse_it NEPSE_IT_DB_USER=nepse NEPS
 ```
 The second form also runs Flyway, the repository, the analysis and every page against a real MySQL database.
 It **empties the tables** in that database, so point it at a separate `nepse_it` database, never `nepse_analysis`.
+
+## Hosting with Docker
+
+The image builds the jar from source, so the server needs only Docker. MySQL runs elsewhere (managed database or another server).
+
+```bash
+cp .env.example .env      # set DB_URL, DB_USERNAME, DB_PASSWORD (.env is git-ignored)
+docker compose up -d --build
+docker compose logs -f app
+```
+
+- The app listens on `127.0.0.1:8083` by default (`APP_BIND`, `APP_PORT` in `.env`). It has **no login**, so put nginx in front with HTTPS
+  and basic auth rather than exposing the port publicly.
+- Flyway creates and migrates the tables on first start; the database user needs CREATE/ALTER rights.
+- Health check: `/actuator/health/liveness` (only the health endpoint is exposed).
+- `config/holidays.txt` is mounted read-only into the container: edit it on the server and `docker compose restart app`.
+- To update: `git pull && docker compose up -d --build`.
