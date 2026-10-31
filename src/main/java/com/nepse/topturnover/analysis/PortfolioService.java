@@ -53,7 +53,7 @@ public class PortfolioService {
         this.backtest = backtest;
     }
 
-    /** Strategies available to simulate: the latest price-adjusted run of each kind. */
+    /** Strategies available to simulate: the latest run of each kind that uses adjusted prices and respects T+2. */
     public List<Option> options() {
         List<Option> out = new ArrayList<>();
         latestRuns().forEach((kind, runId) -> jdbc.query("""
@@ -71,7 +71,7 @@ public class PortfolioService {
         Map<String, Long> runs = new LinkedHashMap<>();
         for (String kind : List.of("ADVANCED", "STANDARD", "CUSTOM")) {
             String extra = kind.equals("CUSTOM") ? " AND horizon = 5 AND market_filter = 0" : "";
-            List<Long> id = jdbc.queryForList("SELECT id FROM backtest_run WHERE kind = :k AND price_adjusted = 1" + extra
+            List<Long> id = jdbc.queryForList("SELECT id FROM backtest_run WHERE kind = :k AND price_adjusted = 1 AND t2_settlement = 1" + extra
                     + " ORDER BY data_to DESC, sessions DESC, id DESC LIMIT 1", Map.of("k", kind), Long.class);
             if (!id.isEmpty()) runs.put(kind, id.get(0));
         }

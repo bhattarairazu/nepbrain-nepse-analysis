@@ -8,12 +8,13 @@
         <div>
             <h1>Backtest</h1>
             <p>Every strategy replayed on every stored session using only what was known that day. A signal after the close
-                buys at the <b>next session's open</b>, sells at the close <span th:text="${h}"></span> sessions later, pays
+                buys at the <b>next session's open</b>, sells at the close <span th:text="${h}"></span> sessions after buying
+                (never before the 3rd session: T+2 settlement), pays
                 <span th:text="${cost}"></span>% round-trip costs, and is compared with the equal-weight market over the same days.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <span class="seg">
-                <a th:each="x : ${ {2, 5, 10} }" th:href="@{/backtest(h=${x},filter=${filter},symbols=${symbols},date=${caseDate})}"
+                <a th:each="x : ${ {3, 5, 10} }" th:href="@{/backtest(h=${x},filter=${filter},symbols=${symbols},date=${caseDate})}"
                    th:classappend="${h == x} ? 'on'" th:text="'Hold ' + ${x} + ' sessions'"></a>
             </span>
             <span class="seg">
@@ -343,7 +344,7 @@
                     <td th:text="${x.kind}"></td>
                     <td th:text="${x.from} + ' → ' + ${x.to}"></td>
                     <td class="num" th:text="${x.sessions}"></td>
-                    <td th:text="(${x.kind == 'ADVANCED'} ? 'walk-forward, structural stops' : (${x.horizon != null} ? 'hold ' + ${x.horizon} + (${x.marketFilter} ? ', market filter' : '') : 'own exit rules'))
+                    <td th:text="(${x.t2Settlement} ? '' : 'pre-T+2 rule (superseded) · ') + (${x.kind == 'ADVANCED'} ? 'walk-forward, structural stops' : (${x.horizon != null} ? 'hold ' + ${x.horizon} + (${x.marketFilter} ? ', market filter' : '') : 'own exit rules'))
                                  + (${x.priceAdjusted} ? '' : ' · unadjusted prices (superseded)')"></td>
                     <td class="num" th:text="${@fmt.count(x.trades)}"></td>
                 </tr>

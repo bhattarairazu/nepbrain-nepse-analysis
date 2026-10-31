@@ -53,6 +53,7 @@ public class JournalController {
                 .filter(v -> from == null || !v.t().exitDate().isBefore(from))
                 .filter(v -> to == null || !v.t().exitDate().isAfter(to)).toList());
         model.addAttribute("review", journal.review(all, from, to));
+        model.addAttribute("today", today());
         model.addAttribute("from", from);
         model.addAttribute("to", to);
         return "journal";

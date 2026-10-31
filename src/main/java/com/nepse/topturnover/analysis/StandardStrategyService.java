@@ -169,13 +169,17 @@ public class StandardStrategyService {
         };
     }
 
-    /** Entry at the open of i+1; exit at the open after the exit/stop condition, or after maxHold sessions. */
+    /**
+     * Entry at the open of i+1 (session T); exit at the open after the exit/stop condition or after maxHold sessions,
+     * never before T+3 (T+2 settlement).
+     */
     private static Trade simulate(Market m, Series s, Ind x, Rule r, int i) {
         int e = i + 1;
         if (e >= s.size()) return null;
         double entry = s.open[e] > 0 ? s.open[e] : s.close[i];
         for (int j = e; j < s.size(); j++) {
             int held = j - e + 1;
+            if (j + 1 < e + BacktestService.EARLIEST_SALE) continue; // T+2: shares can't be sold before session T+3
             String why = null;
             if (s.close[j] <= entry * (1 - r.getStop())) why = "stop";
             else if (exit(r, x, s, j)) why = "rule";

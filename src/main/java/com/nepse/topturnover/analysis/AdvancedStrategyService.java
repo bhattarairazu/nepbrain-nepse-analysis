@@ -22,7 +22,8 @@ import com.nepse.topturnover.repository.BacktestRepository;
  * the first {@link #DESIGN_SHARE} of sessions is the design period, the rest is out-of-sample. A rule "passes" only if
  * it wins more than half its trades and makes money after costs in BOTH periods, with enough trades, and beats random entries.
  *
- * Execution model for NEPSE: buy at the next session's open. A profit target is a limit sell, filled the day the high
+ * Execution model for NEPSE: buy at the next session's open (session T). T+2 settlement: nothing is sold before session T+3.
+ * A profit target is a limit sell, filled from T+3 on the day the high
  * reaches it (at the open if the stock gaps above it). NEPSE TMS has no stop orders, so a stop is checked at the close
  * and sold at the next open. Exit rules and the time limit also sell at the next open. Prices are bonus/right adjusted.
  */
@@ -52,6 +53,10 @@ public class AdvancedStrategyService {
                 "Bollinger bounce only when the equal-weight market is above its 20-session average. Exit at the 20-day average, 8% stop, 15 sessions max."),
         SWEEP_MARKET("SMC sweep + rising market", "Combination",
                 "Liquidity sweep and reclaim only when the market is above its 20-session average. Stop under the sweep low, target 2× risk."),
+        T2_SWING("T+2 swing: quiet Bollinger bounce", "T+2 strategy",
+                "Close back above the lower Bollinger band on below-normal volume, not after a ≥ 3% up-day, Rs 1 Cr+ traded, while the market is "
+                + "above its 20-session average or on a broad sell-off day (10+ stocks bouncing at once). Buy at the next open only if it opens ≤ 2% "
+                + "above the signal close. Stop 3× ATR (5–10%). From T+3: sell after a close at or above the 20-day average, or the stop; 15 sessions max."),
         RANDOM("Benchmark: random entry", "Benchmark",
                 "Random liquid stock-day, 8% stop, target 2× risk, 15 sessions max. A rule must beat this to have an edge.");
 
@@ -69,7 +74,15 @@ public class AdvancedStrategyService {
     }
 
     /** How a trade is managed: absolute stop (or % below entry), optional R-multiple target, optional exit rule, time limit. */
-    record Plan(Double stopPrice, double stopPct, Double rTarget, ExitRule exit, int maxHold) {}
+    /** maxGapPct: skip the trade when the next open is more than this % above the signal close (null = no limit). */
+    record Plan(Double stopPrice, double stopPct, Double rTarget, ExitRule exit, int maxHold, Double maxGapPct) {
+        Plan(Double stopPrice, double stopPct, Double rTarget, ExitRule exit, int maxHold) {
+            this(stopPrice, stopPct, rTarget, exit, maxHold, null);
+        }
+    }
+
+    /** A broad sell-off day: at least this many liquid stocks bounce off the lower band together. */
+    public static final int BROAD_BOUNCE = 10;
 
     interface ExitRule {
         boolean test(Ind x, Series s, int j);
@@ -125,6 +138,7 @@ public class AdvancedStrategyService {
         LocalDate splitDate = m.dates[split];
         int[][] sectorRank = sectorRanks(m);
         Map<String, Integer> sectorIndex = sectorIndex(m);
+        int[] bounces = bounceCounts(m);
 
         Map<Setup, List<Trade>> trades = new HashMap<>();
         Map<Setup, List<String>> today = new HashMap<>();
@@ -145,7 +159,7 @@ public class AdvancedStrategyService {
                 boolean strongSector = sec != null && sectorRank[s.globalIndex[i]][sec] > 0 && sectorRank[s.globalIndex[i]][sec] <= 3;
                 for (Setup setup : Setup.values()) {
                     if (setup == Setup.RANDOM) continue;
-                    Plan p = plan(setup, x, st, s, i, marketUp, strongSector);
+                    Plan p = plan(setup, x, st, s, i, marketUp, strongSector, bounces[s.globalIndex[i]]);
                     if (p == null) continue;
                     if (i == s.size() - 1) today.get(setup).add(s.symbol);
                     Trade t = simulate(s, x, setup, p, i, splitDate);
@@ -189,6 +203,7 @@ public class AdvancedStrategyService {
         boolean marketUp = BacktestService.marketUp(m, T);
         int[][] ranks = sectorRanks(m);
         Map<String, Integer> sectorIdx = sectorIndex(m);
+        int[] bounces = bounceCounts(m);
 
         List<WatchItem> out = new ArrayList<>();
         for (Series s : m.series.values()) {
@@ -203,7 +218,7 @@ public class AdvancedStrategyService {
             for (Setup setup : Setup.values()) {
                 if (setup == Setup.RANDOM) continue;
                 SetupResult r = bySetup.get(setup);
-                Plan p = plan(setup, x, st, s, i, marketUp, strongSector);
+                Plan p = plan(setup, x, st, s, i, marketUp, strongSector, bounces[T]);
                 if (p != null) {
                     double stop = p.stopPrice() != null ? p.stopPrice() : c * (1 - p.stopPct());
                     Double target = p.rTarget() != null ? c + p.rTarget() * (c - stop) : null;
@@ -237,7 +252,7 @@ public class AdvancedStrategyService {
         double c = s.close[i];
         String f = "%.2f";
         switch (setup) {
-            case BB_UPTREND, BB_DRYUP, BB_SECTOR, BB_MARKET -> {
+            case BB_UPTREND, BB_DRYUP, BB_SECTOR, BB_MARKET, T2_SWING -> {
                 if (Double.isNaN(x.lower[i]) || !(c < x.lower[i])) return null;
                 String extra;
                 if (setup == Setup.BB_UPTREND) {
@@ -246,6 +261,11 @@ public class AdvancedStrategyService {
                 } else if (setup == Setup.BB_DRYUP) {
                     Double avgVol = Indicators.mean(s.volume, i - 19, i + 1, 10);
                     extra = avgVol == null ? "" : " on volume below " + String.format("%,.0f", avgVol) + " shares";
+                } else if (setup == Setup.T2_SWING) {
+                    Double avgVol = Indicators.mean(s.volume, i - 19, i + 1, 10);
+                    extra = (avgVol == null ? "" : " on volume below " + String.format("%,.0f", avgVol) + " shares")
+                            + ", opening no more than 2% above that close, while the market is above its 20-session average or many stocks bounce together."
+                            + " Locked until T+3 after buying";
                 } else if (setup == Setup.BB_SECTOR) {
                     if (!strongSector) return null;
                     extra = " (its sector is top-3 now)";
@@ -312,7 +332,7 @@ public class AdvancedStrategyService {
 
     // ------------------------------------------------------------------ setups
 
-    private static Plan plan(Setup setup, Ind x, Structure st, Series s, int i, boolean marketUp, boolean strongSector) {
+    private static Plan plan(Setup setup, Ind x, Structure st, Series s, int i, boolean marketUp, boolean strongSector, int bounceCount) {
         ExitRule bbExit = (xx, ss, j) -> !Double.isNaN(xx.sma20[j]) && ss.close[j] >= xx.sma20[j];
         return switch (setup) {
             case SMC_SWEEP -> sweep(s, i);
@@ -330,8 +350,40 @@ public class AdvancedStrategyService {
                     ? new Plan(null, 0.08, null, (xx, ss, j) -> !Double.isNaN(xx.sma5[j]) && ss.close[j] > xx.sma5[j], 10) : null;
             case BB_SECTOR -> bb(x, s, i) && strongSector ? new Plan(null, 0.08, null, bbExit, 15) : null;
             case BB_MARKET -> bb(x, s, i) && marketUp ? new Plan(null, 0.08, null, bbExit, 15) : null;
+            case T2_SWING -> {
+                Double avgVol = Indicators.mean(s.volume, i - 20, i, 10);
+                boolean quiet = avgVol != null && s.volume[i] < avgVol;
+                boolean noSpike = Double.isNaN(s.change[i]) || s.change[i] < 3;
+                if (!(bb(x, s, i) && quiet && noSpike && (marketUp || bounceCount >= BROAD_BOUNCE))) yield null;
+                double stopPct = Math.min(0.10, Math.max(0.05, 3 * atrPct(s, i)));
+                yield new Plan(null, stopPct, null, bbExit, 15, 2.0);
+            }
             case RANDOM -> null;
         };
+    }
+
+    /** Average true range of the last 14 sessions as a fraction of the close. */
+    static double atrPct(Series s, int i) {
+        double sum = 0;
+        int n = 0;
+        for (int k = Math.max(1, i - 13); k <= i; k++) {
+            double tr = Math.max(s.high[k] - s.low[k], Math.max(Math.abs(s.high[k] - s.close[k - 1]), Math.abs(s.low[k] - s.close[k - 1])));
+            if (!Double.isNaN(tr)) { sum += tr; n++; }
+        }
+        return n == 0 || s.close[i] <= 0 ? 0.08 : sum / n / s.close[i];
+    }
+
+    /** Per session: how many liquid ordinary shares closed back above their lower Bollinger band. */
+    private static int[] bounceCounts(Market m) {
+        int[] count = new int[m.dates.length];
+        for (Series s : m.series.values()) {
+            if (!Sectors.isEquity(s.sector) || s.size() < 25) continue;
+            Ind x = new Ind(s.close, s.high, s.low);
+            for (int i = 1; i < s.size(); i++) {
+                if (s.turnover[i] >= BacktestService.MIN_TURNOVER && bb(x, s, i)) count[s.globalIndex[i]]++;
+            }
+        }
+        return count;
     }
 
     private static boolean bb(Ind x, Series s, int i) {
@@ -401,15 +453,18 @@ public class AdvancedStrategyService {
         int e = i + 1;
         if (e >= s.size()) return null;
         double entry = s.open[e] > 0 ? s.open[e] : s.close[i];
+        if (p.maxGapPct() != null && entry > s.close[i] * (1 + p.maxGapPct() / 100)) return null; // gapped up: skip, don't chase
         double stop = p.stopPrice() != null ? p.stopPrice() : entry * (1 - p.stopPct());
         if (!(stop < entry)) return null; // opened below the stop: no trade
         Double target = p.rTarget() != null ? entry + p.rTarget() * (entry - stop) : null;
+        int firstSale = e + BacktestService.EARLIEST_SALE; // T+2 settlement: nothing can be sold before session T+3
         for (int j = e; j < s.size(); j++) {
             int held = j - e + 1;
-            if (target != null && s.high[j] >= target) {
+            if (target != null && j >= firstSale && s.high[j] >= target) {
                 double px = s.open[j] >= target ? s.open[j] : target; // limit sell fills at the target (or a gap above it)
                 return trade(setup, s, i, e, entry, j, px, held, "target", splitDate);
             }
+            if (j + 1 < firstSale) continue; // a decision at this close could only be executed after T+3
             String why = null;
             if (s.close[j] <= stop) why = "stop";
             else if (p.exit() != null && p.exit().test(x, s, j)) why = "rule";

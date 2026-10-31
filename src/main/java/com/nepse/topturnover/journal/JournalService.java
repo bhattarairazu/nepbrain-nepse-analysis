@@ -22,7 +22,21 @@ public class JournalService {
 
     /** A trade with its numbers. For open trades the numbers value it at the latest stored close, before tax. */
     public record View(JournalTrade t, TradeCosts.Breakdown b, Double lastClose, LocalDate lastDate, boolean stopBroken,
-                       boolean targetReached) {}
+                       boolean targetReached, LocalDate sellableFrom) {
+        /** T+2 settlement: still locked (can't be sold yet) as of the given day. */
+        public boolean lockedOn(LocalDate day) { return day.isBefore(sellableFrom); }
+    }
+
+    /** NEPSE T+2: shares bought on day T can be sold from the 3rd trading day after (weekends skipped, holidays not). */
+    public static LocalDate sellableFrom(LocalDate entry) {
+        LocalDate d = entry;
+        int added = 0;
+        while (added < 3) {
+            d = d.plusDays(1);
+            if (d.getDayOfWeek() != java.time.DayOfWeek.SATURDAY && d.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) added++;
+        }
+        return d;
+    }
 
     public record Group(String key, int trades, int wins, double winRate, double netPnl, double avgNetPct, Double avgR,
                         double profitFactor) {}
@@ -47,7 +61,7 @@ public class JournalService {
 
     public View view(JournalTrade t) {
         if (!t.isOpen()) {
-            return new View(t, costs.of(t, t.exitPrice(), t.exitDate(), true), null, null, false, false);
+            return new View(t, costs.of(t, t.exitPrice(), t.exitDate(), true), null, null, false, false, sellableFrom(t.entryDate()));
         }
         Object[] last = repo.latestClose(t.symbol()).orElse(null);
         double price = last != null ? (double) last[1] : t.entryPrice();
@@ -55,7 +69,7 @@ public class JournalService {
         return new View(t, costs.of(t, price, date.isBefore(t.entryDate()) ? t.entryDate() : date, false),
                 last != null ? price : null, last != null ? date : null,
                 t.stopPrice() != null && last != null && price <= t.stopPrice(),
-                t.targetPrice() != null && last != null && price >= t.targetPrice());
+                t.targetPrice() != null && last != null && price >= t.targetPrice(), sellableFrom(t.entryDate()));
     }
 
     /** Review of trades closed between from and to (inclusive; nulls = no limit). */

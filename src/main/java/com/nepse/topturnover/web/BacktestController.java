@@ -39,7 +39,7 @@ public class BacktestController {
                            @RequestParam(required = false) String symbols,
                            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                            Model model) {
-        int horizon = List.of(2, 5, 10).contains(h) ? h : 5;
+        int horizon = List.of(3, 5, 10).contains(h) ? h : 5; // 3 is the shortest hold T+2 settlement allows
         model.addAttribute("active", "backtest");
         model.addAttribute("h", horizon);
         model.addAttribute("cost", BacktestService.COST_PCT);

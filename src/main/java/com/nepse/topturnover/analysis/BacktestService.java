@@ -27,6 +27,11 @@ public class BacktestService {
     public static final double COST_PCT = 0.8;
     public static final int MIN_HISTORY = 20;
     public static final double MIN_TURNOVER = 1e7; // Rs 1 crore traded on the signal day (liquidity)
+    /**
+     * NEPSE T+2 settlement: shares bought in session T reach the demat account after T+2, so the earliest sale is
+     * session T+3. Every backtest respects this.
+     */
+    public static final int EARLIEST_SALE = 3;
 
     // confidence bar for the Recommendations section
     public static final int CONF_MIN_TRADES = 30;
@@ -127,7 +132,7 @@ public class BacktestService {
     /** @param marketFilter only take signals on days the equal-weight market closes above its 20-session average */
     public synchronized Optional<Result> run(int horizon, boolean marketFilter) {
         Market m = market();
-        if (m == null || m.dates.length < MIN_HISTORY + horizon + 2) return Optional.empty();
+        if (m == null || m.dates.length < MIN_HISTORY + horizon + EARLIEST_SALE + 2) return Optional.empty();
         String key = m.dates[m.dates.length - 1] + ":" + horizon + ":" + marketFilter;
         Result cached = cache.get(key);
         if (cached != null) return Optional.of(cached);
@@ -253,17 +258,20 @@ public class BacktestService {
 
     // ------------------------------------------------------------------ trade simulation
 
-    /** Signal known after the close of session i: buy at the open of i+1, sell at the close of i+h. */
+    /**
+     * Signal known after the close of session i: buy at the open of i+1 (session T), sell at the close of T+h.
+     * h is at least {@link #EARLIEST_SALE} because of T+2 settlement.
+     */
     private static Trade trade(Market m, Series s, Strategy st, int i, int h) {
-        if (i + h >= s.size()) return null;
-        int entryIdx = i + 1;
+        int entryIdx = i + 1, exitIdx = entryIdx + Math.max(h, EARLIEST_SALE);
+        if (exitIdx >= s.size()) return null;
         double entry = s.open[entryIdx] > 0 ? s.open[entryIdx] : s.close[i];
-        double exit = s.close[i + h];
+        double exit = s.close[exitIdx];
         if (entry <= 0 || exit <= 0) return null;
         double net = (exit / entry - 1) * 100 - COST_PCT;
-        int tEntry = s.globalIndex[entryIdx], tExit = s.globalIndex[i + h];
+        int tEntry = s.globalIndex[entryIdx], tExit = s.globalIndex[exitIdx];
         double mkt = (m.index[tExit] / m.index[tEntry - 1] - 1) * 100;
-        return new Trade(st, s.symbol, s.sector, s.dates[i], s.dates[entryIdx], entry, s.dates[i + h], exit, net, mkt, net - mkt);
+        return new Trade(st, s.symbol, s.sector, s.dates[i], s.dates[entryIdx], entry, s.dates[exitIdx], exit, net, mkt, net - mkt);
     }
 
     private static StrategyResult summarise(Strategy st, List<Trade> list, LocalDate mid) {

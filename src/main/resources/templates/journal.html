@@ -22,13 +22,13 @@
     <section class="card block">
         <h2>Open positions <span class="muted small" th:text="${open.size()}"></span></h2>
         <p class="sub">Valued at the latest stored close, after selling charges, before tax. NEPSE has no stop orders:
-            if a close is below your stop, sell at the next open as planned.</p>
+            if a close is below your stop, sell at the next open as planned (once the shares have settled: T+2).</p>
         <p th:if="${open.isEmpty()}" class="muted">No open positions.</p>
         <div class="table-wrap" th:unless="${open.isEmpty()}">
             <table>
                 <thead><tr><th>Stock</th><th>Rule</th><th>Bought</th><th class="num">Qty</th><th class="num">Entry</th><th class="num">Last close</th>
                     <th class="num">Stop</th><th class="num">Target</th><th class="num">Value now</th><th class="num">P&amp;L (before tax)</th>
-                    <th class="num">Days</th><th>Status</th><th></th></tr></thead>
+                    <th class="num">Days</th><th>Sellable from</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                 <tr th:each="v : ${open}" th:with="t=${v.t}">
                     <td class="sym"><a th:href="@{/stock/{x}(x=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
@@ -43,7 +43,9 @@
                     <td class="num" th:classappend="${@fmt.tone(v.b.netPnl)}"><b th:text="${@fmt.count(v.b.netPnl)}"></b>
                         <small th:text="${@fmt.pct(v.b.netPct)}"></small></td>
                     <td class="num" th:text="${v.b.daysHeld}"></td>
+                    <td class="small" th:text="${v.sellableFrom}" title="T+2 settlement: about the 3rd trading day after buying (holidays not counted)"></td>
                     <td>
+                        <span class="pill" th:if="${v.lockedOn(today)}">Locked (T+2)</span>
                         <span class="pill bad" th:if="${v.stopBroken}">Closed below stop: sell</span>
                         <span class="pill good" th:if="${v.targetReached}">Target reached</span>
                         <span class="pill" th:if="${!v.stopBroken and !v.targetReached}">Holding</span>

@@ -28,7 +28,7 @@ public class BacktestRepository {
                            LocalDate exitDate, double exit, Integer held, String exitReason, double netPct, Double marketPct) {}
 
     public record SavedRun(long id, LocalDateTime runAt, String kind, LocalDate from, LocalDate to, int sessions,
-                           Integer horizon, boolean marketFilter, int trades, boolean priceAdjusted) {}
+                           Integer horizon, boolean marketFilter, int trades, boolean priceAdjusted, boolean t2Settlement) {}
 
     private final JdbcTemplate jdbc;
 
@@ -41,15 +41,15 @@ public class BacktestRepository {
     public long saveIfNew(RunKey k, double costPct, Double marketReturnPct, List<SummaryRow> summaries, List<TradeRow> trades) {
         List<Long> existing = jdbc.queryForList("""
                 SELECT id FROM backtest_run WHERE kind = ? AND data_from = ? AND data_to = ? AND sessions = ?
-                  AND horizon <=> ? AND market_filter = ? AND price_adjusted = 1""", Long.class,
+                  AND horizon <=> ? AND market_filter = ? AND price_adjusted = 1 AND t2_settlement = 1""", Long.class,
                 k.kind(), k.from(), k.to(), k.sessions(), k.horizon(), k.marketFilter());
         if (!existing.isEmpty()) return existing.get(0);
 
         GeneratedKeyHolder key = new GeneratedKeyHolder();
         jdbc.update(c -> {
             PreparedStatement ps = c.prepareStatement("""
-                    INSERT INTO backtest_run(run_at, kind, data_from, data_to, sessions, horizon, market_filter, price_adjusted, cost_pct, market_return_pct)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""", Statement.RETURN_GENERATED_KEYS);
+                    INSERT INTO backtest_run(run_at, kind, data_from, data_to, sessions, horizon, market_filter, price_adjusted, t2_settlement, cost_pct, market_return_pct)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)""", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, LocalDateTime.now().withNano(0));
             ps.setString(2, k.kind());
             ps.setObject(3, k.from());
@@ -88,11 +88,11 @@ public class BacktestRepository {
     public List<SavedRun> recentRuns(int limit) {
         return jdbc.query("""
                 SELECT r.id, r.run_at, r.kind, r.data_from, r.data_to, r.sessions, r.horizon, r.market_filter,
-                       (SELECT COUNT(*) FROM backtest_trade t WHERE t.run_id = r.id), r.price_adjusted
+                       (SELECT COUNT(*) FROM backtest_trade t WHERE t.run_id = r.id), r.price_adjusted, r.t2_settlement
                 FROM backtest_run r ORDER BY r.id DESC LIMIT ?""",
                 (rs, i) -> new SavedRun(rs.getLong(1), rs.getObject(2, LocalDateTime.class), rs.getString(3),
                         rs.getObject(4, LocalDate.class), rs.getObject(5, LocalDate.class), rs.getInt(6),
-                        (Integer) rs.getObject(7), rs.getBoolean(8), rs.getInt(9), rs.getBoolean(10)), limit);
+                        (Integer) rs.getObject(7), rs.getBoolean(8), rs.getInt(9), rs.getBoolean(10), rs.getBoolean(11)), limit);
     }
 
     private static Double finite(Double d) {
