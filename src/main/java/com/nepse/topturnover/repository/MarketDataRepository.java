@@ -49,6 +49,11 @@ public class MarketDataRepository {
                 day, LocalDateTime.now().withNano(0), note);
     }
 
+    public Optional<Double> dayTurnover(LocalDate day) {
+        return jdbc.queryForList("SELECT total_turnover FROM trading_day WHERE trade_date = ?", Double.class, day).stream()
+                .filter(v -> v != null).findFirst();
+    }
+
     public Optional<LocalDate> earliestDay() {
         return Optional.ofNullable(jdbc.queryForObject("SELECT MIN(trade_date) FROM trading_day", LocalDate.class));
     }

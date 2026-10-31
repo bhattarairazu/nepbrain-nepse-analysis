@@ -37,10 +37,12 @@ public class CrawlService {
     private final CrawlWindow window;
     private final FeatureService features;
     private final HistoryService history;
+    private final FloorsheetService floorsheet;
     private final ReentrantLock lock = new ReentrantLock();
 
     public CrawlService(NepseProperties props, SharesansarCrawler crawler, MarketDataRepository repo, FeatureService features,
-                        HistoryService history) throws IOException {
+                        HistoryService history, FloorsheetService floorsheet) throws IOException {
+        this.floorsheet = floorsheet;
         this.props = props;
         this.features = features;
         this.history = history;
@@ -70,7 +72,10 @@ public class CrawlService {
 
         CrawlWindow.Decision d = window.check(now);
         if (!d.allowed()) return skipped("Not crawling: " + d.reason(), false, nowLocal, null);
-        if (!replaceToday && repo.hasDay(today)) return skipped("Data for " + today + " is already stored", false, nowLocal, today);
+        if (!replaceToday && repo.hasDay(today)) {
+            floorsheet.startIfNeeded(false); // retries the floorsheet while it is missing or incomplete
+            return skipped("Data for " + today + " is already stored", false, nowLocal, today);
+        }
 
         if (jitter && props.crawl().jitterMaxSeconds() > 0) {
             int wait = ThreadLocalRandom.current().nextInt(props.crawl().jitterMaxSeconds() + 1);
@@ -116,6 +121,7 @@ public class CrawlService {
                 s.tradeDate(), s.quotes().size(), props.analysis().topN());
         LOG.info(msg);
         repo.logCrawl(nowLocal, SharesansarCrawler.NAME, "STORED", s.tradeDate(), msg);
+        floorsheet.startIfNeeded(false); // the session's floorsheet, right after its prices
         return new Result(Status.STORED, msg);
     }
 

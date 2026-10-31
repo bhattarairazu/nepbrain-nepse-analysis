@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Brokers')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Brokers</h1>
+            <p>Who is buying and selling, from the floorsheet. Floorsheets are collected once per session after the close;
+                history builds up from the first collected day. Self-trades (same broker on both sides) are left out of net figures.</p>
+        </div>
+        <span class="seg">
+            <a th:each="n : ${ {1, 5, 10, 20} }" th:href="@{/brokers(sessions=${n},symbol=${symbol},broker=${broker})}"
+               th:classappend="${sessions == n} ? 'on'" th:text="${n} + (${n == 1} ? ' session' : ' sessions')"></a>
+        </span>
+    </div>
+
+    <div th:if="${message != null}" class="flash SKIPPED" th:text="${message}"></div>
+
+    <!-- collection status -->
+    <section class="card block">
+        <div class="page-head" style="margin-bottom:6px">
+            <div>
+                <h2>Floorsheet collection</h2>
+                <p class="sub" style="margin:4px 0 0" th:text="${collector.message} + (${collector.at != null} ? ' · ' + ${#temporals.format(collector.at, 'yyyy-MM-dd HH:mm')} : '')"></p>
+            </div>
+            <form method="post" th:action="@{/brokers/collect}"><button class="btn" type="submit" th:disabled="${collector.running}">Collect today's floorsheet</button></form>
+        </div>
+        <table th:if="${!collected.isEmpty()}">
+            <thead><tr><th>Session</th><th class="num">Trades stored</th><th class="num">Reported by site</th><th class="num">Total amount</th><th>Status</th><th>Note</th></tr></thead>
+            <tbody>
+            <tr th:each="c : ${collected}">
+                <td th:text="${@fmt.day(c.date)}"></td>
+                <td class="num" th:text="${@fmt.count(c.rowsStored)}"></td>
+                <td class="num" th:text="${@fmt.count(c.rowsReported)}"></td>
+                <td class="num" th:text="${@fmt.money(c.totalAmount)}"></td>
+                <td><span class="pill" th:classappend="${c.complete} ? 'good' : 'warn'" th:text="${c.complete} ? 'Complete' : 'Incomplete'"></span></td>
+                <td class="small muted" th:text="${c.note}"></td>
+            </tr>
+            </tbody>
+        </table>
+        <script th:if="${collector.running}">setTimeout(() => location.reload(), 8000);</script>
+    </section>
+
+    <!-- lookup -->
+    <section class="card block">
+        <form class="inline" method="get" th:action="@{/brokers}">
+            <input type="hidden" name="sessions" th:value="${sessions}">
+            <label class="muted small">Stock <input name="symbol" th:value="${symbol}" placeholder="e.g. NABIL" style="width:120px"></label>
+            <label class="muted small">Broker no. <input type="number" name="broker" min="1" max="100" th:value="${broker}" style="width:90px"></label>
+            <button class="btn primary" type="submit">Look up</button>
+            <a class="btn" th:href="@{/brokers(sessions=${sessions})}">Clear</a>
+        </form>
+    </section>
+
+    <div th:if="${market.days.isEmpty()}" class="card empty">No floorsheet stored yet. It is collected after the next session closes (or use the button above after 15:15 on a trading day).</div>
+
+    <!-- one stock -->
+    <section class="card block" th:if="${stock != null}">
+        <h2 th:text="${stock.symbol} + ' · brokers over ' + ${stock.days.size()} + ' session(s)'"></h2>
+        <p th:if="${stock.flow == null}" class="muted">No floorsheet trades for this stock in the window.</p>
+        <th:block th:if="${stock.flow != null}" th:with="f=${stock.flow}">
+            <div class="tiles">
+                <div class="card tile"><div class="k">Traded</div><div class="v" th:text="'Rs ' + ${@fmt.money(f.amount)}"></div>
+                    <div class="s" th:text="${@fmt.count(f.volume)} + ' shares'"></div></div>
+                <div class="card tile"><div class="k">Top 3 net buyers</div><div class="v pos" th:text="${@fmt.share(f.top3NetBuyShare)}"></div>
+                    <div class="s">of the volume, kept as net position</div></div>
+                <div class="card tile"><div class="k">Top 3 net sellers</div><div class="v neg" th:text="${@fmt.share(f.top3NetSellShare)}"></div>
+                    <div class="s">of the volume, sold net</div></div>
+                <div class="card tile"><div class="k">Top buyers' average price</div><div class="v" th:text="${@fmt.price(f.topBuyersAvgPrice)}"></div>
+                    <div class="s" th:text="'last close ' + ${@fmt.price(f.lastClose)} + ' · window ' + ${@fmt.pct(f.priceChangePct)}"></div></div>
+                <div class="card tile"><div class="k">Self-trades</div><div class="v" th:text="${@fmt.share(f.selfShare)}"></div>
+                    <div class="s">same broker on both sides</div></div>
+            </div>
+            <p><span th:each="sg : ${f.signals}" class="pill" th:classappend="${sg.tone}" style="margin-right:4px" th:text="${sg.label}" th:title="${sg.meaning}"></span></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Broker</th><th class="num">Bought</th><th class="num">Avg buy</th><th class="num">Sold</th><th class="num">Avg sell</th>
+                        <th class="num">Net qty</th><th class="num">Net Rs</th><th class="num">Share of buying</th><th class="num">Net-buying days</th><th class="num">Self-trades</th></tr></thead>
+                    <tbody>
+                    <tr th:each="b : ${stock.brokers}">
+                        <td><a th:href="@{/brokers(sessions=${sessions},broker=${b.broker})}" th:text="'#' + ${b.broker}"></a></td>
+                        <td class="num" th:text="${@fmt.count(b.buyQty)}"></td>
+                        <td class="num" th:text="${@fmt.price(b.avgBuy)}"></td>
+                        <td class="num" th:text="${@fmt.count(b.sellQty)}"></td>
+                        <td class="num" th:text="${@fmt.price(b.avgSell)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(b.netQty)}"><b th:text="${@fmt.count(b.netQty)}"></b></td>
+                        <td class="num" th:classappend="${@fmt.tone(b.netAmount)}" th:text="${@fmt.money(b.netAmount)}"></td>
+                        <td class="num" th:text="${@fmt.share(b.buyQty / f.volume)}"></td>
+                        <td class="num" th:text="${b.daysNetBuying} + '/' + ${b.daysActive}"></td>
+                        <td class="num muted" th:text="${b.selfQty > 0} ? ${@fmt.count(b.selfQty)} : '—'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </th:block>
+    </section>
+
+    <!-- one broker -->
+    <section class="card block" th:if="${brokerView != null}" th:with="bv=${brokerView}">
+        <h2 th:text="'Broker #' + ${bv.broker} + ' · ' + ${bv.days.size()} + ' session(s)'"></h2>
+        <p class="sub" th:text="'Bought Rs ' + ${@fmt.money(bv.buyAmount)} + ', sold Rs ' + ${@fmt.money(bv.sellAmount)} + ' (excluding self-trades).'"></p>
+        <div class="grid-2">
+            <div>
+                <h4>Accumulating</h4>
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Net qty</th><th class="num">Net Rs</th><th class="num">Avg buy</th><th class="num">Last close</th><th class="num">Days</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${bv.accumulating.isEmpty()}"><td colspan="6" class="muted">None.</td></tr>
+                    <tr th:each="r : ${bv.accumulating}">
+                        <td class="sym"><a th:href="@{/brokers(sessions=${sessions},symbol=${r.symbol})}" th:text="${r.symbol}"></a><small th:text="${r.sector}"></small></td>
+                        <td class="num pos" th:text="${@fmt.count(r.netQty)}"></td>
+                        <td class="num pos" th:text="${@fmt.money(r.netAmount)}"></td>
+                        <td class="num" th:text="${@fmt.price(r.avgBuy)}"></td>
+                        <td class="num" th:text="${@fmt.price(r.lastClose)}"></td>
+                        <td class="num" th:text="${r.daysNetBuying}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <h4>Distributing</h4>
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Net qty</th><th class="num">Net Rs</th><th class="num">Last close</th></tr></thead>
+                    <tbody>
+                    <tr th:if="${bv.distributing.isEmpty()}"><td colspan="4" class="muted">None.</td></tr>
+                    <tr th:each="r : ${bv.distributing}">
+                        <td class="sym"><a th:href="@{/brokers(sessions=${sessions},symbol=${r.symbol})}" th:text="${r.symbol}"></a><small th:text="${r.sector}"></small></td>
+                        <td class="num neg" th:text="${@fmt.count(r.netQty)}"></td>
+                        <td class="num neg" th:text="${@fmt.money(r.netAmount)}"></td>
+                        <td class="num" th:text="${@fmt.price(r.lastClose)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- market-wide signals -->
+    <th:block th:unless="${market.days.isEmpty()}">
+        <p class="muted small" th:text="'Market-wide signals over ' + ${market.days.size()} + ' session(s) (' + ${@fmt.day(market.days[market.days.size() - 1])} + ' → '
+                + ${@fmt.day(market.days[0])} + '), ' + ${market.stocks} + ' stocks with Rs 5 Cr+ traded.'"></p>
+        <div class="legend" style="margin-bottom:12px">
+            <div th:each="sg : ${signals}"><span class="pill" th:classappend="${sg.tone}" th:text="${sg.label}"></span> <span th:text="${sg.meaning}"></span></div>
+        </div>
+
+        <section class="card block" th:each="grp : ${groups}">
+            <h2 th:text="${grp.key}"></h2>
+            <p th:if="${grp.value.isEmpty()}" class="muted">None in this window.</p>
+            <div class="table-wrap" th:unless="${grp.value.isEmpty()}">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Traded</th><th class="num">Price change</th><th class="num">Top 3 net buy</th><th class="num">Top 3 net sell</th>
+                        <th>Top buyer</th><th>Top seller</th><th class="num">Top buyers' avg</th><th class="num">Last close</th><th class="num">Self-trades</th></tr></thead>
+                    <tbody>
+                    <tr th:each="f : ${grp.value}">
+                        <td class="sym"><a th:href="@{/brokers(sessions=${sessions},symbol=${f.symbol})}" th:text="${f.symbol}"></a><small th:text="${f.sector}"></small></td>
+                        <td class="num" th:text="${@fmt.money(f.amount)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(f.priceChangePct)}" th:text="${@fmt.pct(f.priceChangePct)}"></td>
+                        <td class="num pos" th:text="${@fmt.share(f.top3NetBuyShare)}"></td>
+                        <td class="num neg" th:text="${@fmt.share(f.top3NetSellShare)}"></td>
+                        <td th:if="${f.topBuyer != null}"><a th:href="@{/brokers(sessions=${sessions},broker=${f.topBuyer.broker})}" th:text="'#' + ${f.topBuyer.broker}"></a>
+                            <small class="muted" th:text="'+' + ${@fmt.count(f.topBuyer.netQty)}"></small></td>
+                        <td th:unless="${f.topBuyer != null}">—</td>
+                        <td th:if="${f.topSeller != null}"><a th:href="@{/brokers(sessions=${sessions},broker=${f.topSeller.broker})}" th:text="'#' + ${f.topSeller.broker}"></a>
+                            <small class="muted" th:text="${@fmt.count(f.topSeller.netQty)}"></small></td>
+                        <td th:unless="${f.topSeller != null}">—</td>
+                        <td class="num" th:text="${@fmt.price(f.topBuyersAvgPrice)}"></td>
+                        <td class="num" th:text="${@fmt.price(f.lastClose)}"></td>
+                        <td class="num" th:text="${@fmt.share(f.selfShare)}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </th:block>
+
+    <p class="muted small">Limits: a broker number stands for all of that broker's clients, so heavy buying can be many small investors;
+        big players also split orders across brokers. Use broker signals as one check alongside price, volume and the chart.</p>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

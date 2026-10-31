@@ -13,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** All nepse.* settings from application.properties. Values are parsed here so the config can stay plain text. */
 @ConfigurationProperties(prefix = "nepse")
-public record NepseProperties(Market market, Crawl crawl, Analysis analysis, History history, Costs costs) {
+public record NepseProperties(Market market, Crawl crawl, Analysis analysis, History history, Costs costs, Floorsheet floorsheet) {
 
     public record Market(String timezone, String tradingDays, String closeTime, String holidaysFile) {
         public ZoneId zone() { return ZoneId.of(timezone); }
@@ -49,6 +49,9 @@ public record NepseProperties(Market market, Crawl crawl, Analysis analysis, His
      */
     public record Costs(String commissionTiers, double minCommission, double sebonPct, double dpCharge,
                         double cgtShortPct, double cgtLongPct) {}
+
+    /** Daily floorsheet collection from ShareSansar's floorsheet page (current session only). */
+    public record Floorsheet(boolean enabled, String url, int pageSize, int delaySeconds, int maxPages, double completeTolerancePct) {}
 
     /** mondayFridaySince: first date of NEPSE's Monday-Friday week; before it the week was Sunday-Thursday. */
     public record History(String ajaxUrl, int delaySeconds, int maxSessions, int sectorRefreshDays, String mondayFridaySince) {
