@@ -61,6 +61,13 @@
                 <a th:href="@{/trade-size}" th:classappend="${a == 'tradesize'} ? 'on'">Trade size</a>
             </div>
         </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'rules','rulepicks'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">My rules</button>
+            <div class="nav-panel">
+                <a th:href="@{/rules}" th:classappend="${a == 'rules'} ? 'on'">Rule backtest</a>
+                <a th:href="@{/rules/picks}" th:classappend="${a == 'rulepicks'} ? 'on'">Rule picks today</a>
+            </div>
+        </div>
         <div class="nav-group" th:classappend="${#lists.contains({'lab','backtest'}, a)} ? 'on'">
             <button type="button" class="nav-group-btn" aria-expanded="false">Backtests</button>
             <div class="nav-panel">

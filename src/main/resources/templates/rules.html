@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Rule backtest')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>My rules</h1>
+            <p>Your nine rule sets, in the versions you listed, tested on every ordinary share with Rs 1 Cr+ traded on the signal day.
+                One position per stock per rule at a time: buy at the next open, sell at the open after the exit rule fires (never before T+3),
+                0.8% round-trip charges, before tax. Prices are bonus/right adjusted.</p>
+        </div>
+    </div>
+    <nav th:replace="~{fragments/rules :: tabs('test')}"></nav>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history. Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note">
+            <b>Read this first.</b> Only <span th:text="${r.sessions}"></span> sessions are stored (<span th:text="${@fmt.day(r.from)}"></span> →
+            <span th:text="${@fmt.day(r.to)}"></span>). A rule can only be tested once its slowest indicator has enough history, so rules that need a
+            200-day average (3, 5, 9 and 1 with EMA 200) are tested on the last few months only. Each rule's window is split: the first 60% is the
+            design period, the rest out-of-sample. A rule is marked <b>profitable</b> only with 30+ trades (10+ out-of-sample) and a positive average
+            in both periods and a positive out-of-sample median. "NEPSE index" here is the app's equal-weight market of all ordinary shares
+            (<span th:class="${@fmt.tone(r.marketPct)}" th:text="${@fmt.pct(r.marketPct)}"></span> over the stored period).
+            Trades still open are not in the averages; they are shown under "Open now".
+        </div>
+
+        <section class="card block">
+            <h2>Results <span class="muted small" th:text="${r.passed().size()} + ' of ' + ${r.rows.size()} + ' versions profitable in both periods'"></span></h2>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Rule</th><th>Tested from</th><th class="num">Trades</th><th class="num">Win</th><th class="num">Avg</th><th class="num">Median</th>
+                        <th class="num">Design: n</th><th class="num">avg</th><th class="num">Out-of-sample: n</th><th class="num">win</th><th class="num">avg</th>
+                        <th class="num">median</th><th class="num">Held</th><th class="num">Profit factor</th><th class="num">vs market</th>
+                        <th class="num">Open now</th><th>Verdict</th></tr></thead>
+                    <tbody>
+                    <tr th:each="x : ${r.rows}">
+                        <td style="white-space:normal;min-width:220px"><a th:href="'#' + ${x.v}"><span th:replace="~{fragments/rules :: name(${x})}"></span></a></td>
+                        <td class="small" th:text="${@fmt.day(x.testFrom)}"></td>
+                        <td class="num" th:text="${x.all.n}"></td>
+                        <td class="num" th:text="${x.all.n > 0} ? ${@fmt.decimal(x.all.winPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.all.avgPct, 4)}" th:text="${x.all.n > 0} ? ${@fmt.pct(x.all.avgPct)} : '—'"></td>
+                        <td class="num muted" th:text="${x.all.n > 0} ? ${@fmt.pct(x.all.medianPct)} : '—'"></td>
+                        <td class="num" th:text="${x.design.n}"></td>
+                        <td class="num" th:style="${@fmt.heat(x.design.avgPct, 4)}" th:text="${x.design.n > 0} ? ${@fmt.pct(x.design.avgPct)} : '—'"></td>
+                        <td class="num" th:text="${x.oos.n}"></td>
+                        <td class="num" th:text="${x.oos.n > 0} ? ${@fmt.decimal(x.oos.winPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:style="${@fmt.heat(x.oos.avgPct, 4)}"><b th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.avgPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${x.oos.n > 0} ? ${@fmt.pct(x.oos.medianPct)} : '—'"></td>
+                        <td class="num" th:text="${x.all.n > 0} ? ${@fmt.decimal(x.avgHeld, 0)} : '—'" title="average sessions held"></td>
+                        <td class="num" th:text="${x.all.n > 0} ? ${@fmt.decimal(x.profitFactor, 2)} : '—'" title="sum of gains ÷ sum of losses"></td>
+                        <td class="num" th:classappend="${@fmt.tone(x.avgVsMarket)}" th:text="${x.all.n > 0} ? ${@fmt.pct(x.avgVsMarket)} : '—'"
+                            title="average trade minus the equal-weight market over the same days"></td>
+                        <td class="num"><span th:text="${x.openCount}"></span>
+                            <small th:if="${x.openAvgPct != null}" th:class="${@fmt.tone(x.openAvgPct)}" style="display:block" th:text="${@fmt.pct(x.openAvgPct)}"></small></td>
+                        <td><span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small muted">Every run is saved in MySQL (backtest_run kind RULESETS, with each closed trade in backtest_trade) and never deleted.</p>
+        </section>
+
+        <section class="card block" th:each="x : ${r.rows}" th:id="${x.v}">
+            <h2><span th:replace="~{fragments/rules :: name(${x})}"></span></h2>
+            <p class="small"><span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span>
+                <span class="muted" th:text="' Tested ' + ${@fmt.day(x.testFrom)} + ' → ' + ${@fmt.day(r.to)} + ', out-of-sample from ' + ${@fmt.day(x.split)} + '.'"></span></p>
+            <p class="small"><b>Buy:</b> <span th:text="${x.v.entry}"></span><br><b>Sell:</b> <span th:text="${x.v.exit}"></span></p>
+            <p th:if="${x.recent.isEmpty()}" class="muted">No closed trades.</p>
+            <details th:unless="${x.recent.isEmpty()}">
+                <summary class="small" th:text="'Latest ' + ${x.recent.size()} + ' closed trades'"></summary>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Stock</th><th>Signal</th><th>Bought</th><th class="num">at</th><th>Sold</th><th class="num">at</th>
+                            <th class="num">Held</th><th>Why sold</th><th class="num">Net</th><th class="num">Market</th></tr></thead>
+                        <tbody>
+                        <tr th:each="t : ${x.recent}">
+                            <td class="sym"><a th:href="@{/stock/{s}(s=${t.symbol})}" th:text="${t.symbol}"></a><small th:text="${t.sector}"></small></td>
+                            <td class="small" th:text="${t.signal}"></td>
+                            <td class="small" th:text="${t.entryDate}"></td>
+                            <td class="num" th:text="${@fmt.price(t.entry)}"></td>
+                            <td class="small" th:text="${t.exitDate}"></td>
+                            <td class="num" th:text="${@fmt.price(t.exit)}"></td>
+                            <td class="num" th:text="${t.held}"></td>
+                            <td class="small"><span th:text="${t.reason}"></span> <span class="pill warn" th:unless="${t.design}">oos</span></td>
+                            <td class="num" th:classappend="${@fmt.tone(t.netPct)}" th:text="${@fmt.pct(t.netPct)}"></td>
+                            <td class="num muted" th:text="${@fmt.pct(t.marketPct)}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

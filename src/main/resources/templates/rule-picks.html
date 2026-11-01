@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Rule picks')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>My rules</h1>
+            <p>The stocks your rule sets would buy now (signal at the latest close, buy at the next open) and the positions each rule is still holding,
+                with the price that would end the position. Only ordinary shares with Rs 1 Cr+ traded today.</p>
+        </div>
+    </div>
+    <nav th:replace="~{fragments/rules :: tabs('picks')}"></nav>
+
+    <div th:if="${r == null}" class="card empty">Not enough stored history. Use Data → Backfill.</div>
+
+    <th:block th:if="${r != null}">
+        <div class="note" th:if="${r.passed().isEmpty()}">
+            <b>None of the rule versions passed the backtest</b> (profitable in both the design and out-of-sample periods with enough trades; see the Backtest tab).
+            Use these lists as stocks to look at, not as buy signals, and size positions so the exit line limits the loss.
+        </div>
+        <div class="note" th:unless="${r.passed().isEmpty()}">
+            <b th:text="${r.passed().size()} + ' version(s) passed the backtest:'"></b>
+            <span th:each="x, st : ${r.passed()}" th:text="${x.v.family} + '. ' + ${x.v.title} + ' (' + ${x.v.version} + ')' + (${st.last} ? '.' : '; ')"></span>
+            Signals from rules that did not pass are shown greyed out with their verdict.
+        </div>
+
+        <section class="card block">
+            <h2>Buy signals at the close of <span th:text="${@fmt.day(r.to)}"></span> <span class="muted small" th:text="${r.combined.size()} + ' stocks'"></span></h2>
+            <p class="sub">Stocks flagged by more than one rule set first. A rule set counts once however many of its versions fired.</p>
+            <p th:if="${r.combined.isEmpty()}" class="muted">No rule fired today.</p>
+            <div class="table-wrap" th:unless="${r.combined.isEmpty()}">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Turnover</th><th class="num">Rule sets</th><th>Rules</th></tr></thead>
+                    <tbody>
+                    <tr th:each="c : ${r.combined}" th:classappend="${c.anyPassed} ? '' : 'muted'">
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${c.symbol})}" th:text="${c.symbol}"></a><small th:text="${c.sector}"></small></td>
+                        <td class="num" th:text="${@fmt.price(c.close)}"></td>
+                        <td class="num" th:text="${@fmt.money(c.turnover)}"></td>
+                        <td class="num"><b th:text="${c.families.size()}"></b></td>
+                        <td class="small" style="white-space:normal;min-width:220px">
+                            <a th:each="v, st : ${c.variants}" th:href="'#' + ${v}" th:text="${v.family} + '. ' + ${v.title} + ' · ' + ${v.version} + (${st.last} ? '' : ' · ')"
+                               style="display:block"></a></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card block" th:each="x : ${r.rows}" th:id="${x.v}">
+            <h2><span th:replace="~{fragments/rules :: name(${x})}"></span></h2>
+            <p class="small"><span class="pill" th:classappend="${x.tone}" th:text="${x.verdict}"></span>
+                <span class="muted" th:if="${x.oos.n > 0}" th:text="' Out-of-sample: ' + ${x.oos.n} + ' trades, average ' + ${@fmt.pct(x.oos.avgPct)} + ', ' + ${@fmt.decimal(x.oos.winPct, 0)} + '% won.'"></span>
+                <a class="muted" th:href="'/rules#' + ${x.v}">Backtest ›</a></p>
+            <p class="small"><b>Buy:</b> <span th:text="${x.v.entry}"></span><br><b>Sell:</b> <span th:text="${x.v.exit}"></span></p>
+
+            <p class="small" th:if="${x.v.family == 1}" th:with="on=${x.v.version.startsWith('EMA 200')} ? ${r.regime.above200()} : ${r.regime.above100()},
+                    line=${x.v.version.startsWith('EMA 200')} ? ${r.regime.ema200} : ${r.regime.ema100}">
+                <b>Index filter:</b> <span class="pill" th:classappend="${on} ? 'good' : 'bad'" th:text="${on} ? 'on' : 'off'"></span>
+                <span class="muted" th:text="'equal-weight index ' + ${@fmt.decimal(r.regime.index, 1)} + (${line != null} ? ' vs EMA ' + ${@fmt.decimal(line, 1)} : ' (not enough history for the EMA)')
+                    + (${on} ? '' : ': no new buys until the index is back above it')"></span></p>
+            <h3 class="small">Buy at the next open <span class="muted" th:text="${x.picks.size()}"></span></h3>
+            <p th:if="${x.picks.isEmpty()}" class="muted small">No signal today.</p>
+            <div class="table-wrap" th:unless="${x.picks.isEmpty()}" th:classappend="${x.passed()} ? '' : 'muted'">
+                <table>
+                    <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Change</th><th class="num">Turnover</th><th>Why</th><th class="num">Exit line</th><th>Sell when</th></tr></thead>
+                    <tbody>
+                    <tr th:each="p : ${x.picks}">
+                        <td class="sym"><a th:href="@{/stock/{s}(s=${p.symbol})}" th:text="${p.symbol}"></a><small th:text="${p.sector}"></small></td>
+                        <td class="num" th:text="${@fmt.price(p.close)}"></td>
+                        <td class="num" th:classappend="${@fmt.tone(p.changePct)}" th:text="${@fmt.pct(p.changePct)}"></td>
+                        <td class="num" th:text="${@fmt.money(p.turnover)}"></td>
+                        <td class="small" th:text="${p.why}"></td>
+                        <td class="num"><span th:text="${p.exitLine != null} ? ${@fmt.price(p.exitLine)} : '—'"></span>
+                            <small class="muted" style="display:block" th:if="${p.exitLine != null}" th:text="${@fmt.pct((p.exitLine / p.close - 1) * 100)}"></small></td>
+                        <td class="small muted" style="white-space:normal;min-width:180px" th:text="${p.exitNote}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <details th:unless="${x.holdings.isEmpty()}" style="margin-top:12px">
+                <summary class="small" th:text="'Still holding ' + ${x.holdings.size()} + ' (bought on earlier signals, no exit yet)'"></summary>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Stock</th><th>Bought</th><th class="num">at</th><th class="num">Close</th><th class="num">Held</th><th class="num">Open P&amp;L</th>
+                            <th class="num">Exit line</th><th>Status</th></tr></thead>
+                        <tbody>
+                        <tr th:each="h : ${x.holdings}">
+                            <td class="sym"><a th:href="@{/stock/{s}(s=${h.symbol})}" th:text="${h.symbol}"></a><small th:text="${h.sector}"></small></td>
+                            <td class="small" th:text="${h.entryDate}"></td>
+                            <td class="num" th:text="${@fmt.price(h.entry)}"></td>
+                            <td class="num" th:text="${@fmt.price(h.close)}"></td>
+                            <td class="num" th:text="${h.held}"></td>
+                            <td class="num" th:classappend="${@fmt.tone(h.openPct)}" th:text="${@fmt.pct(h.openPct)}" title="after round-trip charges"></td>
+                            <td class="num" th:text="${h.exitLine != null} ? ${@fmt.price(h.exitLine)} : '—'"></td>
+                            <td class="small"><span th:if="${h.sellNow != null}" class="pill bad" th:text="'Sell at next open: ' + ${h.sellNow}"></span>
+                                <span th:if="${h.sellNow == null}" class="muted" th:text="'hold; ' + ${h.exitNote}"></span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+    </th:block>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

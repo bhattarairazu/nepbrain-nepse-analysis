@@ -457,3 +457,10 @@ details.edit[open] > summary { margin-bottom: 8px; }
 summary { cursor: pointer; }
 summary::-webkit-details-marker { display: none; }
 @media (max-width: 640px) { .note-grid { grid-template-columns: 1fr; } .note-form { grid-template-columns: 1fr; } }
+
+/* tabs (My rules) */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 16px; overflow-x: auto; }
+.tabs a { padding: 9px 16px; color: var(--muted); font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs a:hover { color: var(--text); }
+.tabs a.on { color: var(--accent); border-bottom-color: var(--accent); }
+tr.muted td, .table-wrap.muted { opacity: .62; }

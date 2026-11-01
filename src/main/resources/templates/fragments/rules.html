@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- The two tabs of My rules; tab = 'test' or 'picks' -->
+<nav th:fragment="tabs(tab)" class="tabs" aria-label="My rules">
+    <a th:href="@{/rules}" th:classappend="${tab == 'test'} ? 'on'" th:attr="aria-current=${tab == 'test'} ? 'page' : null">Backtest</a>
+    <a th:href="@{/rules/picks}" th:classappend="${tab == 'picks'} ? 'on'" th:attr="aria-current=${tab == 'picks'} ? 'page' : null">Picks today</a>
+</nav>
+
+<!-- A rule version's name with its verdict -->
+<span th:fragment="name(x)"><b th:text="${x.v.family} + '. ' + ${x.v.title}"></b> <small class="muted" style="display:block" th:text="${x.v.version}"></small></span>
+</body>
+</html>
