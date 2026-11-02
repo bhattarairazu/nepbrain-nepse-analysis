@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.nepse.topturnover.analysis.FeatureService;
+import com.nepse.topturnover.analysis.PatternService;
 import com.nepse.topturnover.config.NepseProperties;
 import com.nepse.topturnover.crawler.CrawlException;
 import com.nepse.topturnover.crawler.SharesansarCrawler;
@@ -38,10 +39,12 @@ public class CrawlService {
     private final FeatureService features;
     private final HistoryService history;
     private final FloorsheetService floorsheet;
+    private final PatternService patterns;
     private final ReentrantLock lock = new ReentrantLock();
 
     public CrawlService(NepseProperties props, SharesansarCrawler crawler, MarketDataRepository repo, FeatureService features,
-                        HistoryService history, FloorsheetService floorsheet) throws IOException {
+                        HistoryService history, FloorsheetService floorsheet, PatternService patterns) throws IOException {
+        this.patterns = patterns;
         this.floorsheet = floorsheet;
         this.props = props;
         this.features = features;
@@ -120,6 +123,13 @@ public class CrawlService {
         String msg = String.format("Stored %s: %d stocks, top %d by turnover and by volume",
                 s.tradeDate(), s.quotes().size(), props.analysis().topN());
         LOG.info(msg);
+        try { // the pattern scanner's picks for this session, recorded as soon as its prices are in
+            int picks = patterns.recordAfterCrawl(s.tradeDate());
+            msg += "; pattern scanner recorded " + picks + " new pick(s)";
+        } catch (RuntimeException e) {
+            LOG.warn("Pattern scanner failed after the crawl", e);
+            msg += "; pattern scanner failed: " + e.getMessage();
+        }
         repo.logCrawl(nowLocal, SharesansarCrawler.NAME, "STORED", s.tradeDate(), msg);
         floorsheet.startIfNeeded(false); // the session's floorsheet, right after its prices
         return new Result(Status.STORED, msg);

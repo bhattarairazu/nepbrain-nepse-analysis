@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<!-- Tabs of the Pattern scanner; tab = 'today' | 'check' | 'history' -->
+<nav th:fragment="tabs(tab)" class="tabs" aria-label="Pattern scanner">
+    <a th:href="@{/pattern}" th:classappend="${tab == 'today'} ? 'on'">Today's picks</a>
+    <a th:href="@{/pattern/check}" th:classappend="${tab == 'check'} ? 'on'">Check stocks</a>
+    <a th:href="@{/pattern/history}" th:classappend="${tab == 'history'} ? 'on'">Past picks &amp; results</a>
+    <a th:href="@{/discover}" th:classappend="${tab == 'discover'} ? 'on'">Run analysis now</a>
+</nav>
+
+<!-- The rule, in one box -->
+<details th:fragment="rule" class="card block">
+    <summary><b>The rule: quiet coil + rising turnover</b> <span class="muted small">(tap to read)</span></summary>
+    <p class="small">All seven at the close: <b>liquid</b> (Rs 50 L+ average turnover, Rs 25 L+ today) · <b>quiet</b> (ATR(14) ≤ 3% of price) ·
+        <b>tight</b> (20-session range ≤ 12.5%) · <b>not popped</b> (5-session change ≤ +0.6%, MACD histogram ≤ 0.13% of price) ·
+        <b>not extended</b> (≤ 17% above the 60-session low) · <b>money coming in</b> (last 5 sessions' turnover ≥ 1.3× the 60 before).</p>
+    <p class="small"><b>Trade:</b> buy at the next open; sell at <b>+10%</b> (target) or on a close <b>7% below</b> the entry (stop),
+        otherwise after about 20 sessions. No sale before T+3. Results include 0.8% round-trip charges, before tax.</p>
+    <p class="small muted">Found by mining the stored history: on Nov 2025 – Jun 2026 it averaged +2.1% a trade (61% won, 109 trades); checked on
+        Jun – Oct 2026, which was not used to find it: +3.1% (72% won, 61 trades), while all stocks averaged −1.3%. One year of data and a small
+        sample: the Past picks page tracks whether it keeps working.</p>
+</details>
+<!-- Picks with their outcomes -->
+<table th:fragment="picks(list)">
+                <thead><tr><th>Stock</th><th>Signal</th><th class="num">Close</th><th>Bought</th><th class="num">at</th><th>Result</th><th>Sold</th><th class="num">at</th>
+                    <th class="num">Net</th><th class="num">Best · worst</th><th class="num">Last close</th></tr></thead>
+                <tbody>
+                <tr th:each="p : ${list}" th:with="o=${p.outcome}, r=${p.row}">
+                    <td class="sym"><a th:href="@{/pattern/check(symbols=${r.symbol})}" th:text="${r.symbol}"></a><small th:text="${r.sector}"></small></td>
+                    <td class="small"><span th:text="${r.date}"></span> <span class="pill" th:classappend="${r.source == 'LIVE'} ? 'good' : ''" th:text="${r.source}"></span></td>
+                    <td class="num" th:text="${@fmt.price(r.close)}"></td>
+                    <td class="small" th:text="${o.entryDate != null} ? ${o.entryDate} : '—'"></td>
+                    <td class="num" th:text="${o.entry != null} ? ${@fmt.price(o.entry)} : '—'"></td>
+                    <td><span class="pill" th:classappend="${o.status.tone}" th:text="${o.status.title}"></span>
+                        <small class="muted" style="display:block" th:if="${o.sessions > 0}" th:text="${o.sessions} + ' sessions'"></small></td>
+                    <td class="small" th:text="${o.exitDate != null} ? ${o.exitDate} : '—'"></td>
+                    <td class="num" th:text="${o.exit != null} ? ${@fmt.price(o.exit)} : '—'"></td>
+                    <td class="num" th:classappend="${@fmt.tone(o.netPct)}"><b th:text="${o.netPct != null} ? ${@fmt.pct(o.netPct)} : '—'"></b>
+                        <small class="muted" style="display:block" th:if="${o.status.name() == 'OPEN'}">so far</small></td>
+                    <td class="num small" th:text="${o.bestPct != null} ? ${@fmt.pct(o.bestPct)} + ' · ' + ${@fmt.pct(o.worstPct)} : '—'"></td>
+                    <td class="num muted" th:text="${@fmt.price(o.lastClose)}"></td>
+                </tr>
+                </tbody>
+            </table>
+</body>
+</html>

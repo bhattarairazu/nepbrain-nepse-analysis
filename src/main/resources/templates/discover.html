@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Run analysis')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Run analysis now</h1>
+            <p>Searches all stored history (however many years) for the indicator combinations that came before profitable trades, and shows the
+                best rules with the stocks matching them at the latest close. Every run is saved.</p>
+        </div>
+    </div>
+    <nav th:replace="~{fragments/pattern :: tabs('discover')}"></nav>
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+
+    <div class="grid-2">
+        <section class="card">
+            <h2>Run it</h2>
+            <form method="post" th:action="@{/discover/run}" class="note-form">
+                <label>Target % <input type="number" name="target" value="10" min="2" max="50" step="0.5"></label>
+                <label>Stop % <input type="number" name="stop" value="7" min="2" max="30" step="0.5"></label>
+                <label>Max sessions <input type="number" name="sessions" value="20" min="3" max="120"></label>
+                <div class="wide"><button class="btn primary" type="submit" th:disabled="${status.running}">▶ Run analysis now</button></div>
+            </form>
+            <p class="small muted" style="margin:10px 0 0">Each trade buys at the next open and sells at the target (on the high), the stop (on a close)
+                or after the max sessions; never before T+3; 0.8% charges. With 10 years of data a run can take a few minutes.</p>
+        </section>
+        <section class="card job" th:classappend="${status.running} ? 'running'">
+            <h2>Status <span class="pill" th:classappend="${status.running} ? 'warn' : 'good'" th:text="${status.running} ? 'Running' : 'Idle'"></span></h2>
+            <th:block th:if="${status.running}">
+                <p th:text="${status.stage} + ' …'"></p>
+                <div class="progress"><span th:style="'width:' + ${status.pct} + '%'"></span></div>
+                <script>setTimeout(() => location.reload(), 4000);</script>
+            </th:block>
+            <p th:unless="${status.running}" class="sub" th:text="${status.message != null} ? ${status.message} : 'Press Run analysis now to start.'"></p>
+            <details class="small" style="margin-top:8px">
+                <summary>How it works</summary>
+                <p>Every liquid stock-day (Rs 50 L+ average turnover) gets 28 indicator values, from data up to that day only:
+                    <span th:each="f, st : ${features}" th:text="${f[1]} + (${st.last} ? '.' : '; ')"></span></p>
+                <p>The history is cut into three periods. <b>Find</b> (first half): a search over combinations of up to four conditions
+                    (each indicator above or below one of its quintile edges) keeps the ones whose trades did best. <b>Choose</b> (next quarter):
+                    the found rules are ranked on these sessions, which the search never saw. <b>Check</b> (last quarter): the final, untouched
+                    test. Trust a rule only if it is positive in the Check period too; searching many combinations always finds some that worked by luck.</p>
+            </details>
+        </section>
+    </div>
+
+    <section class="card block" th:if="${r != null}" style="margin-top:16px">
+        <h2>Top rules <span class="muted small" th:text="'run of ' + ${#temporals.format(r.at, 'd MMM yyyy HH:mm')}"></span></h2>
+        <p class="sub" th:text="${r.sessions} + ' sessions (' + ${@fmt.day(r.from)} + ' → ' + ${@fmt.day(r.to)} + '), ' + ${r.stocks} + ' stocks, '
+            + ${r.stockDays} + ' liquid stock-days. Find until ' + ${@fmt.day(r.findTo)} + ', choose until ' + ${@fmt.day(r.chooseTo)} + ', check after. Trade: +'
+            + ${@fmt.decimal(r.settings.targetPct, 1)} + '% / −' + ${@fmt.decimal(r.settings.stopPct, 1)} + '% / ' + ${r.settings.maxSessions} + ' sessions.'"></p>
+        <p class="small">Every liquid stock-day as a trade (the baseline): find
+            <b th:classappend="${@fmt.tone(r.baseFind.avgPct)}" th:text="${@fmt.pct(r.baseFind.avgPct)}"></b>, choose
+            <b th:classappend="${@fmt.tone(r.baseChoose.avgPct)}" th:text="${@fmt.pct(r.baseChoose.avgPct)}"></b>, check
+            <b th:classappend="${@fmt.tone(r.baseCheck.avgPct)}" th:text="${@fmt.pct(r.baseCheck.avgPct)}"></b>. A rule must beat these.</p>
+        <p th:if="${r.rules.isEmpty()}" class="muted">No rule was profitable in the find period with enough trades in the choose period.</p>
+        <div class="table-wrap" th:unless="${r.rules.isEmpty()}">
+            <table>
+                <thead><tr><th>#</th><th>Rule (all conditions at the close)</th><th class="num">Find: trades</th><th class="num">win</th><th class="num">avg</th>
+                    <th class="num">Choose: trades</th><th class="num">win</th><th class="num">avg</th><th class="num">Check: trades</th><th class="num">win</th>
+                    <th class="num">avg</th><th>Matches now</th></tr></thead>
+                <tbody>
+                <tr th:each="f : ${r.rules}">
+                    <td><b th:text="${f.rank}"></b></td>
+                    <td class="small" style="white-space:normal;min-width:260px"><span th:each="c : ${f.conditions}" th:text="'• ' + ${c}" style="display:block"></span>
+                        <span class="muted" style="display:block;margin-top:4px" th:text="'find ' + ${@fmt.pct(f.find.avgPct)} + ' · choose ' + ${@fmt.pct(f.choose.avgPct)}
+                            + ' · check ' + (${f.check.n > 0} ? ${@fmt.pct(f.check.avgPct)} + ' (' + ${f.check.n} + ' trades)' : '—')"></span></td>
+                    <td class="num" th:text="${f.find.n}"></td>
+                    <td class="num" th:text="${@fmt.decimal(f.find.winPct, 0)} + '%'"></td>
+                    <td class="num" th:style="${@fmt.heat(f.find.avgPct, 4)}" th:text="${@fmt.pct(f.find.avgPct)}"></td>
+                    <td class="num" th:text="${f.choose.n}"></td>
+                    <td class="num" th:text="${@fmt.decimal(f.choose.winPct, 0)} + '%'"></td>
+                    <td class="num" th:style="${@fmt.heat(f.choose.avgPct, 4)}" th:text="${@fmt.pct(f.choose.avgPct)}"></td>
+                    <td class="num" th:text="${f.check.n}"></td>
+                    <td class="num" th:text="${f.check.n > 0} ? ${@fmt.decimal(f.check.winPct, 0)} + '%' : '—'"></td>
+                    <td class="num" th:style="${@fmt.heat(f.check.avgPct, 4)}"><b th:text="${f.check.n > 0} ? ${@fmt.pct(f.check.avgPct)} : '—'"></b>
+                        <small style="display:block" class="pill" th:if="${f.check.n >= 10}" th:classappend="${f.check.avgPct > 0} ? 'good' : 'bad'"
+                               th:text="${f.check.avgPct > 0} ? 'held up' : 'failed'"></small></td>
+                    <td class="small" style="white-space:normal;min-width:140px">
+                        <span th:if="${f.today.isEmpty()}" class="muted">none</span>
+                        <a th:each="s, st : ${f.today}" th:href="@{/stock/{x}(x=${s})}" th:text="${s} + (${st.last} ? '' : ', ')"></a>
+                        <a th:unless="${f.today.isEmpty()}" class="btn sm" style="margin-top:4px" th:href="@{/pattern/check(symbols=${#strings.listJoin(f.today, ',')})}">Check</a></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="small muted">Trades count one position per stock at a time; results after 0.8% charges, before tax. "Held up" = positive in the untouched
+            check period with 10+ trades. Rules that failed there most likely worked by chance.</p>
+    </section>
+
+    <section class="card block" th:unless="${runs.isEmpty()}">
+        <h2>Earlier runs</h2>
+        <div class="date-chips">
+            <a th:each="x : ${runs}" th:href="@{/discover(run=${x.id})}" th:classappend="${r != null and r.id == x.id} ? 'on'"
+               th:text="${#temporals.format(x.at, 'd MMM HH:mm')} + ' · ' + ${x.sessions} + ' sessions · ' + ${x.rules} + ' rules'"></a>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

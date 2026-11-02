@@ -61,6 +61,15 @@
                 <a th:href="@{/trade-size}" th:classappend="${a == 'tradesize'} ? 'on'">Trade size</a>
             </div>
         </div>
+        <div class="nav-group" th:classappend="${#lists.contains({'pattern','patterncheck','patternhistory','discover'}, a)} ? 'on'">
+            <button type="button" class="nav-group-btn" aria-expanded="false">Pattern scanner</button>
+            <div class="nav-panel">
+                <a th:href="@{/pattern}" th:classappend="${a == 'pattern'} ? 'on'">Today's picks</a>
+                <a th:href="@{/pattern/check}" th:classappend="${a == 'patterncheck'} ? 'on'">Check stocks</a>
+                <a th:href="@{/pattern/history}" th:classappend="${a == 'patternhistory'} ? 'on'">Past picks &amp; results</a>
+                <a th:href="@{/discover}" th:classappend="${a == 'discover'} ? 'on'">▶ Run analysis now</a>
+            </div>
+        </div>
         <div class="nav-group" th:classappend="${#lists.contains({'rules','rulepicks'}, a)} ? 'on'">
             <button type="button" class="nav-group-btn" aria-expanded="false">My rules</button>
             <div class="nav-panel">

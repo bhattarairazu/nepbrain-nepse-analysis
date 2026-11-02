@@ -464,3 +464,17 @@ summary::-webkit-details-marker { display: none; }
 .tabs a:hover { color: var(--text); }
 .tabs a.on { color: var(--accent); border-bottom-color: var(--accent); }
 tr.muted td, .table-wrap.muted { opacity: .62; }
+
+/* pattern scanner */
+.pattern-strip { display: flex; flex-wrap: wrap; gap: 4px; }
+.pattern-strip span { display: flex; flex-direction: column; align-items: center; min-width: 44px; padding: 4px 2px; border-radius: 8px; background: var(--surface-2); font-size: 12px; }
+.pattern-strip span small { color: var(--muted); font-size: 10.5px; }
+.pattern-strip span.n { background: var(--warn-soft); }
+.pattern-strip span.m { background: var(--pos-soft); color: var(--pos); outline: 1.5px solid var(--pos); }
+.date-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.date-chips a { padding: 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 12.5px; text-decoration: none; color: var(--text); }
+.date-chips a.on { background: var(--accent); color: #fff; }
+.date-chips a i { font-style: normal; color: var(--pos); margin-left: 3px; font-size: 9px; }
+.date-chips a.on i { color: #fff; }
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
