@@ -58,7 +58,7 @@
 
             <h3 class="small" style="margin-top:14px">Past picks for <span th:text="${sym}"></span>
                 <span class="muted" th:if="${c.pastSummary.closed > 0}"
-                      th:text="' · ' + ${c.pastSummary.closed} + ' closed, ' + ${@fmt.decimal(c.pastSummary.winPct, 0)} + '% won, average ' + ${@fmt.pct(c.pastSummary.avgNetPct)}"></span></h3>
+                      th:text="' · ' + ${c.pastSummary.picks} + ' picks = ' + ${c.pastSummary.trades} + ' trades (one position at a time); ' + ${c.pastSummary.closed} + ' closed, ' + ${@fmt.decimal(c.pastSummary.winPct, 0)} + '% won, average ' + ${@fmt.pct(c.pastSummary.avgNetPct)}"></span></h3>
             <p th:if="${c.past.isEmpty()}" class="muted small">The rule never picked this stock in the stored history.</p>
             <div class="table-wrap" th:unless="${c.past.isEmpty()}">
                 <table th:replace="~{fragments/pattern :: picks(${c.past})}"></table>

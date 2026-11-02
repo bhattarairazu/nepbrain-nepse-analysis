@@ -68,18 +68,44 @@ public class PatternService {
         public boolean closed() { return status == Status.TARGET || status == Status.STOP || status == Status.TIME; }
     }
 
-    public record Pick(Row row, Outcome outcome) {}
+    /** A recorded pick and its outcome; repeat = the same stock was already held from an earlier pick, so it is not a new trade. */
+    public record Pick(Row row, Outcome outcome, boolean repeat) {
+        Pick(Row row, Outcome outcome) { this(row, outcome, false); }
+    }
 
-    public record Summary(int picks, int closed, int open, int wins, double winPct, double avgNetPct, double medianNetPct, int targets, int stops) {
-        static Summary of(List<Pick> picks) {
+    /** Results counting one position per stock at a time: picks made while the stock was already held are left out. */
+    public record Summary(int picks, int repeats, int trades, int closed, int open, int wins, double winPct, double avgNetPct, double medianNetPct,
+                          int targets, int stops) {
+        static Summary of(List<Pick> all) {
+            List<Pick> picks = all.stream().filter(p -> !p.repeat()).toList();
             List<Double> net = picks.stream().filter(p -> p.outcome().closed()).map(p -> p.outcome().netPct()).sorted().toList();
             int wins = (int) net.stream().filter(d -> d > 0).count();
-            return new Summary(picks.size(), net.size(), (int) picks.stream().filter(p -> p.outcome().status() == Status.OPEN).count(), wins,
+            return new Summary(all.size(), all.size() - picks.size(), picks.size(), net.size(),
+                    (int) picks.stream().filter(p -> p.outcome().status() == Status.OPEN).count(), wins,
                     net.isEmpty() ? 0 : 100.0 * wins / net.size(), net.stream().mapToDouble(d -> d).average().orElse(0),
                     net.isEmpty() ? 0 : net.get(net.size() / 2),
                     (int) picks.stream().filter(p -> p.outcome().status() == Status.TARGET).count(),
                     (int) picks.stream().filter(p -> p.outcome().status() == Status.STOP).count());
         }
+    }
+
+    /**
+     * Marks picks made while an earlier pick of the same stock was still held (bought and not yet sold) as repeats.
+     * The list must hold every pick of each stock it contains.
+     */
+    static List<Pick> markRepeats(List<Pick> picks) {
+        Map<String, LocalDate> heldUntil = new java.util.HashMap<>();
+        Map<Pick, Boolean> repeat = new java.util.IdentityHashMap<>();
+        picks.stream().sorted(Comparator.comparing((Pick p) -> p.row().symbol()).thenComparing(p -> p.row().date())).forEach(p -> {
+            LocalDate until = heldUntil.get(p.row().symbol());
+            boolean rep = until != null && p.row().date().isBefore(until);
+            repeat.put(p, rep);
+            if (!rep) {
+                Outcome o = p.outcome();
+                heldUntil.put(p.row().symbol(), o.exitDate() != null ? o.exitDate() : LocalDate.MAX); // open or waiting: still held
+            }
+        });
+        return picks.stream().map(p -> new Pick(p.row(), p.outcome(), repeat.get(p))).toList();
     }
 
     public static Summary summarise(List<Pick> picks) {
@@ -140,7 +166,8 @@ public class PatternService {
         }
         stored.values().stream().sorted(Comparator.comparing(Row::date).reversed())
                 .forEach(r -> past.add(new Pick(r, outcome(s, s.indexOf(Arrays.binarySearch(m.dates, r.date())), r.close()))));
-        return Optional.of(new StockCheck(now, recent, past, Summary.of(past)));
+        List<Pick> marked = markRepeats(past);
+        return Optional.of(new StockCheck(now, recent, marked, Summary.of(marked)));
     }
 
     /** What the scanner recommended on a session and how each pick did since. */
@@ -148,14 +175,17 @@ public class PatternService {
         Market m = backtest.data();
         List<Pick> picks = new ArrayList<>();
         LocalDate latest = m == null ? null : m.dates[m.dates.length - 1];
-        for (Row r : repo.onDate(RULE, date)) picks.add(new Pick(r, outcomeFor(m, r)));
-        return new History(date, picks, Summary.of(picks), latest);
+        List<Row> day = repo.onDate(RULE, date);
+        for (Row r : day) for (Row x : repo.forSymbol(RULE, r.symbol())) if (!x.date().isAfter(date)) picks.add(new Pick(x, outcomeFor(m, x)));
+        List<Pick> marked = markRepeats(picks).stream().filter(p -> p.row().date().equals(date))
+                .sorted(Comparator.comparing((Pick p) -> p.row().turnoverX(), Comparator.nullsLast(Comparator.reverseOrder()))).toList();
+        return new History(date, marked, Summary.of(marked), latest);
     }
 
     /** Every recorded pick between two dates with its outcome (for the overall track record). */
     public List<Pick> between(LocalDate from, LocalDate to) {
         Market m = backtest.data();
-        return repo.between(RULE, from, to).stream().map(r -> new Pick(r, outcomeFor(m, r))).toList();
+        return markRepeats(repo.between(RULE, from, to).stream().map(r -> new Pick(r, outcomeFor(m, r))).toList());
     }
 
     public List<PatternRepository.DateCount> dates() {

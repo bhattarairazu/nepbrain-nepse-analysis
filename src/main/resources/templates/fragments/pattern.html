@@ -26,13 +26,14 @@
                 <thead><tr><th>Stock</th><th>Signal</th><th class="num">Close</th><th>Bought</th><th class="num">at</th><th>Result</th><th>Sold</th><th class="num">at</th>
                     <th class="num">Net</th><th class="num">Best · worst</th><th class="num">Last close</th></tr></thead>
                 <tbody>
-                <tr th:each="p : ${list}" th:with="o=${p.outcome}, r=${p.row}">
+                <tr th:each="p : ${list}" th:with="o=${p.outcome}, r=${p.row}" th:classappend="${p.repeat} ? 'muted' : ''">
                     <td class="sym"><a th:href="@{/pattern/check(symbols=${r.symbol})}" th:text="${r.symbol}"></a><small th:text="${r.sector}"></small></td>
                     <td class="small"><span th:text="${r.date}"></span> <span class="pill" th:classappend="${r.source == 'LIVE'} ? 'good' : ''" th:text="${r.source}"></span></td>
                     <td class="num" th:text="${@fmt.price(r.close)}"></td>
                     <td class="small" th:text="${o.entryDate != null} ? ${o.entryDate} : '—'"></td>
                     <td class="num" th:text="${o.entry != null} ? ${@fmt.price(o.entry)} : '—'"></td>
-                    <td><span class="pill" th:classappend="${o.status.tone}" th:text="${o.status.title}"></span>
+                    <td><span class="pill" th:if="${p.repeat}" title="the stock was already held from an earlier pick: not a new trade, not counted">Already held</span>
+                    <span class="pill" th:unless="${p.repeat}" th:classappend="${o.status.tone}" th:text="${o.status.title}"></span>
                         <small class="muted" style="display:block" th:if="${o.sessions > 0}" th:text="${o.sessions} + ' sessions'"></small></td>
                     <td class="small" th:text="${o.exitDate != null} ? ${o.exitDate} : '—'"></td>
                     <td class="num" th:text="${o.exit != null} ? ${@fmt.price(o.exit)} : '—'"></td>
