@@ -65,6 +65,7 @@ public class LeadersService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
     private java.util.Map<String, Leader> all = java.util.Map.of();
 
     public LeadersService(BacktestService backtest, MarketRegimeService regime, BrokerAnalysisService brokers, BacktestRepository store) {
@@ -78,7 +79,7 @@ public class LeadersService {
         Market m = backtest.data();
         if (m == null || m.dates.length < M6 + 10) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
         int T = m.dates.length, lt = T - 1;
 
         MarketRegimeService.Result reg = regime.run().orElse(null);
@@ -171,6 +172,7 @@ public class LeadersService {
                 p.quintiles, p.days, reg == null ? null : reg.verdict(), reg == null ? "" : reg.verdictTone());
         all = out.stream().collect(java.util.stream.Collectors.toMap(Leader::symbol, x -> x, (a, b) -> a));
         cachedFor = last;
+        cachedData = m;
         save(cached);
         return Optional.of(cached);
     }

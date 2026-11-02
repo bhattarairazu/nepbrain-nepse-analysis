@@ -54,6 +54,7 @@ public class RecommendationService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
     private int cachedFloorsheetDays = -1;
 
     public RecommendationService(BacktestService backtest, BrokerAnalysisService brokers, BacktestRepository store) {
@@ -67,7 +68,7 @@ public class RecommendationService {
         if (m == null || m.dates.length < BASELINE + 30) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
         List<LocalDate> fsDays = brokers.days(BigPlayerService.BROKER_WINDOW);
-        if (cached != null && last.equals(cachedFor) && fsDays.size() == cachedFloorsheetDays) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData && fsDays.size() == cachedFloorsheetDays) return Optional.of(cached);
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
 
         // floorsheet accumulation (latest window only: not enough history to use it in the backtest)
@@ -142,6 +143,7 @@ public class RecommendationService {
         recent.sort(Comparator.comparing(PastPick::date).reversed().thenComparingInt(PastPick::rank));
         cached = new Result(m.dates[0], m.dates[split], last, T, last, top, near, today.size(), rows, recent, !accumulated.isEmpty(), signals);
         cachedFor = last;
+        cachedData = m;
         cachedFloorsheetDays = fsDays.size();
         save(cached);
         return Optional.of(cached);

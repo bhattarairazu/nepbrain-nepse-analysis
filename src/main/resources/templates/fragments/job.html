@@ -9,7 +9,7 @@
     </h2>
     <p class="sub" style="margin:4px 0 8px">
         <span th:text="${job.message}"></span>
-        <span th:if="${job.target > 0 and job.job.startsWith('Backfill')}"
+        <span th:if="${job.target > 0 and (job.job.startsWith('Backfill') or job.job.startsWith('Fetch'))}"
               th:text="' · stored ' + ${job.stored} + ', already had ' + ${job.alreadyStored} + ', no session ' + ${job.skipped}"></span>
     </p>
     <ul class="joblog" th:if="${!job.log.isEmpty()}">

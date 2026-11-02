@@ -44,6 +44,7 @@ public class MarketRegimeService {
     private final BacktestService backtest;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public MarketRegimeService(BacktestService backtest) {
         this.backtest = backtest;
@@ -53,7 +54,7 @@ public class MarketRegimeService {
         Market m = backtest.data();
         if (m == null || m.dates.length < MID + 20) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
         int T = m.dates.length, lt = T - 1;
 
         double[] idx = m.index, ema50 = Ind.ema(idx, MID), sma200 = T >= LONG ? Ind.sma(idx, LONG) : null;
@@ -160,6 +161,7 @@ public class MarketRegimeService {
         cached = new Result(last, T, ix, ema50[lt], sma200 == null || Double.isNaN(sma200[lt]) ? null : sma200[lt], a50, a200, newHighs, newLows, hlUniverse,
                 ad20, to20, to60, to120, checks, passes, verdict, tone, text, sectors, new Chart(dates, ci, c50, c200, cb, ct));
         cachedFor = last;
+        cachedData = m;
         return Optional.of(cached);
     }
 

@@ -69,6 +69,7 @@ public class StrategyLabService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public StrategyLabService(BacktestService backtest, TradeCosts costs, BacktestRepository store) {
         this.backtest = backtest;
@@ -84,7 +85,7 @@ public class StrategyLabService {
         Market m = backtest.data();
         if (m == null || m.dates.length < WARMUP + 40) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         Ctx c = new Ctx(m);
         int start = WARMUP, T = m.dates.length;
@@ -98,6 +99,7 @@ public class StrategyLabService {
         labs.add(buyHold(c, start, split));
         cached = new Result(m.dates[start], m.dates[split], last, T - start, dates, labs);
         cachedFor = last;
+        cachedData = m;
         save(cached);
         return Optional.of(cached);
     }

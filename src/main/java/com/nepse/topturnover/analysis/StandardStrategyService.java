@@ -74,6 +74,7 @@ public class StandardStrategyService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public StandardStrategyService(BacktestService backtest, BacktestRepository store) {
         this.backtest = backtest;
@@ -88,7 +89,7 @@ public class StandardStrategyService {
         Market m = backtest.data();
         if (m == null || m.dates.length < 60) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         Map<Rule, List<Trade>> trades = new HashMap<>();
         Map<Rule, List<String>> today = new HashMap<>();
@@ -127,6 +128,7 @@ public class StandardStrategyService {
         double bh = (m.index[m.index.length - 1] / m.index[0] - 1) * 100;
         cached = new Result(m.dates[0], last, m.dates.length, bh, results);
         cachedFor = last;
+        cachedData = m;
         List<BacktestRepository.TradeRow> rows = new ArrayList<>();
         trades.forEach((rule, list) -> list.forEach(t -> rows.add(new BacktestRepository.TradeRow(rule.name(), t.symbol(), t.signal(),
                 t.entryDate(), t.entry(), t.exitDate(), t.exit(), t.held(), t.exitReason(), t.netPct(), t.marketPct()))));

@@ -64,6 +64,7 @@ public class HistoryService {
         return t;
     });
     private volatile Status status = Status.idle();
+    private volatile boolean stopRequested;
 
     public HistoryService(NepseProperties props, MarketDataRepository repo, FeatureService features, BacktestService backtest,
                           StandardStrategyService standard, AdvancedStrategyService advanced,
@@ -116,7 +117,7 @@ public class HistoryService {
         ZonedDateTime now = ZonedDateTime.now(props.market().zone());
         LocalDate d = now.toLocalTime().isBefore(props.crawl().start()) ? now.toLocalDate().minusDays(1) : now.toLocalDate();
 
-        SharesansarSession session = null;
+        Conn conn = new Conn();
         int have = 0, stored = 0, already = 0, skipped = 0, requests = 0;
         int maxRequests = target * 2 + 15;
         List<String> log = new ArrayList<>();
@@ -134,44 +135,11 @@ public class HistoryService {
                 continue;
             }
             try {
-                if (session == null) {
-                    session = open();
-                } else {
-                    pause();
-                }
                 requests++;
                 update(target, stored, already, skipped, "Fetching " + d + " …", log);
-                Document doc;
-                try {
-                    doc = session.day(d);
-                } catch (SharesansarSession.ExpiredException expired) {
-                    session = open(); // token expired during a long run: start a fresh session and retry once
-                    doc = session.day(d);
-                }
-                MarketSnapshot s;
-                try {
-                    s = SharesansarCrawler.parse(doc);
-                } catch (CrawlException e) {
-                    skipped++;
-                    repo.markNonTradingDay(d, "no price table");
-                    log.add(d + ": no price table (market closed?)");
-                    d = d.minusDays(1);
-                    continue;
-                }
-                if (!s.tradeDate().equals(d) || s.quotes().size() < props.crawl().minRows()) {
-                    skipped++;
-                    repo.markNonTradingDay(d, "site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows");
-                    log.add(d + ": no session (site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows)");
-                } else if (repo.looksStale(s)) {
-                    skipped++;
-                    log.add(d + ": same data as the previous session, skipped");
-                } else {
-                    repo.save(s, props.analysis().topN(), now().withNano(0));
-                    String msg = "Backfilled " + d + ": " + s.quotes().size() + " stocks";
-                    repo.logCrawl(now().withNano(0), SOURCE_HISTORY, "STORED", d, msg);
-                    log.add(msg);
-                    stored++;
-                    have++;
+                switch (fetchDay(conn, d, log)) {
+                    case STORED -> { stored++; have++; }
+                    case NO_SESSION, STALE -> skipped++;
                 }
             } catch (CrawlException e) {
                 repo.logCrawl(now().withNano(0), SOURCE_HISTORY, "FAILED", d, e.getMessage());
@@ -181,17 +149,151 @@ public class HistoryService {
             }
             d = d.minusDays(1);
         }
+        int guessed = afterNewDays();
+        String done = String.format("Done: %d session(s) stored now, %d already stored, %d date(s) without a session%s.",
+                stored, already, skipped, guessed > 0 ? ", sectors guessed for " + guessed + " new stock(s)" : "");
+        if (have < target) done += " Reached the request limit before " + target + " sessions; run it again to continue.";
+        status = new Status(status.job(), false, status.started(), now(), target, stored, already, skipped, done, List.copyOf(log));
+        LOG.info(done);
+    }
+
+    // ------------------------------------------------------------------ date range
+
+    /** What a range fetch would do: calendar days, sessions already stored, dates to request, dates known to have no session. */
+    public record Plan(LocalDate from, LocalDate to, int stored, int toFetch, int knownNoSession, long minutes) {}
+
+    public Plan plan(LocalDate from, LocalDate to, boolean recheck) {
+        Set<LocalDate> holidays = holidays(), have = repo.storedDays(from, to), none = repo.nonTradingDays(from, to);
+        int stored = 0, fetch = 0, known = 0;
+        for (LocalDate d = to; !d.isBefore(from); d = d.minusDays(1)) {
+            if (have.contains(d)) stored++;
+            else if (!props.history().wasTradingWeekday(d) || holidays.contains(d)) continue;
+            else if (none.contains(d) && !recheck) known++;
+            else fetch++;
+        }
+        return new Plan(from, to, stored, fetch, known, Math.round(fetch * (props.history().delaySeconds() + 1.5) / 60.0));
+    }
+
+    /** Starts fetching every missing session from `to` back to `from`; returns null when started, otherwise why not. */
+    public synchronized String startRange(LocalDate from, LocalDate to, boolean recheck) {
+        if (status.running()) return "Another history job is already running.";
+        LocalDate today = ZonedDateTime.now(props.market().zone()).toLocalDate();
+        if (from == null || to == null) return "Choose both dates.";
+        if (to.isAfter(today)) to = today;
+        if (from.isAfter(to)) return "The from date must be on or before the to date.";
+        Plan p = plan(from, to, recheck);
+        stopRequested = false;
+        status = new Status("Fetch " + from + " → " + to, true, now(), null, p.toFetch(), 0, p.stored(), 0, "Starting…", List.of());
+        LocalDate f = from, t = to;
+        executor.submit(() -> runSafely(() -> fetchRange(f, t, recheck, p)));
+        return null;
+    }
+
+    /** Asks the running job to stop after the current request. */
+    public void stop() {
+        if (status.running()) stopRequested = true;
+    }
+
+    /**
+     * Requests each missing trading weekday from `to` back to `from`, newest first, one every delay-seconds.
+     * Stored sessions, weekends, listed holidays and (unless recheck) dates already found to have no session are skipped
+     * without a request. Stops on request, on a site error, or after {@link #EMPTY_STREAK} dates in a row without a
+     * session (the start of the site's history). Running it again continues where it stopped.
+     */
+    void fetchRange(LocalDate from, LocalDate to, boolean recheck, Plan plan) {
+        Set<LocalDate> holidays = holidays(), have = repo.storedDays(from, to), none = recheck ? Set.of() : repo.nonTradingDays(from, to);
+        Conn conn = new Conn();
+        List<String> log = new ArrayList<>();
+        int stored = 0, skipped = 0, empty = 0, done = 0;
+        String end = null;
+        for (LocalDate d = to; !d.isBefore(from); d = d.minusDays(1)) {
+            if (have.contains(d) || !props.history().wasTradingWeekday(d) || holidays.contains(d) || none.contains(d)) continue;
+            if (stopRequested) { end = "Stopped by you at " + d + "; run it again to continue."; break; }
+            try {
+                update(plan.toFetch(), stored, plan.stored(), skipped, "Fetching " + d + " (" + (done + 1) + " of " + plan.toFetch() + ") …", log);
+                done++;
+                if (fetchDay(conn, d, log) == DayResult.STORED) { stored++; empty = 0; repo.clearNonTradingDay(d); }
+                else { skipped++; empty++; }
+            } catch (CrawlException e) {
+                repo.logCrawl(now().withNano(0), SOURCE_HISTORY, "FAILED", d, e.getMessage());
+                log.add(d + ": " + e.getMessage());
+                end = "Stopped on an error at " + d + ": " + e.getMessage() + ". Run it again to continue.";
+                break;
+            }
+            if (log.size() > 300) log.subList(0, log.size() - 300).clear();
+            if (empty >= EMPTY_STREAK) {
+                end = "No sessions for " + EMPTY_STREAK + " trading days in a row before " + d.plusDays(1)
+                        + ": the site's history seems to start around here.";
+                break;
+            }
+        }
+        int guessed = afterNewDays();
+        String msg = String.format("%s%d session(s) stored, %d already stored, %d date(s) without a session%s.",
+                end == null ? "Done: " : end + " ", stored, plan.stored(), skipped,
+                guessed > 0 ? ", sectors guessed for " + guessed + " new stock(s)" : "");
+        repo.logCrawl(now().withNano(0), SOURCE_HISTORY, stored > 0 ? "STORED" : "SKIPPED", to, "Range " + from + " → " + to + ": " + msg);
+        status = new Status(status.job(), false, status.started(), now(), plan.toFetch(), stored, plan.stored(), skipped, msg, List.copyOf(log));
+        LOG.info(msg);
+    }
+
+    // ------------------------------------------------------------------ one day
+
+    static final int EMPTY_STREAK = 15;
+
+    enum DayResult { STORED, NO_SESSION, STALE }
+
+    /** The site session, opened on first use and reopened when its token expires. */
+    private final class Conn {
+        SharesansarSession session;
+
+        Document day(LocalDate d) throws CrawlException {
+            if (session == null) session = open();
+            else pause();
+            try {
+                return session.day(d);
+            } catch (SharesansarSession.ExpiredException expired) {
+                session = open(); // token expired during a long run: start a fresh session and retry once
+                return session.day(d);
+            }
+        }
+    }
+
+    /** Fetches and stores one date's full price table. */
+    private DayResult fetchDay(Conn conn, LocalDate d, List<String> log) throws CrawlException {
+        Document doc = conn.day(d);
+        MarketSnapshot s;
+        try {
+            s = SharesansarCrawler.parse(doc);
+        } catch (CrawlException e) {
+            repo.markNonTradingDay(d, "no price table");
+            log.add(d + ": no price table (market closed?)");
+            return DayResult.NO_SESSION;
+        }
+        if (!s.tradeDate().equals(d) || s.quotes().size() < props.crawl().minRows()) {
+            repo.markNonTradingDay(d, "site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows");
+            log.add(d + ": no session (site shows " + s.tradeDate() + ", " + s.quotes().size() + " rows)");
+            return DayResult.NO_SESSION;
+        }
+        if (repo.looksStale(s)) {
+            log.add(d + ": same data as the previous session, skipped");
+            return DayResult.STALE;
+        }
+        repo.save(s, props.analysis().topN(), now().withNano(0));
+        String msg = "Stored " + d + ": " + s.quotes().size() + " stocks";
+        repo.logCrawl(now().withNano(0), SOURCE_HISTORY, "STORED", d, msg);
+        log.add(msg);
+        return DayResult.STORED;
+    }
+
+    /** After new sessions: guess sectors for new stocks and drop cached analysis. */
+    private int afterNewDays() {
         int guessed = repo.autoAssignSectors();
         features.evict();
         backtest.evict();
         standard.evict();
         advanced.evict();
         lab.evict();
-        String done = String.format("Done: %d session(s) stored now, %d already stored, %d date(s) without a session%s.",
-                stored, already, skipped, guessed > 0 ? ", sectors guessed for " + guessed + " new stock(s)" : "");
-        if (have < target) done += " Reached the request limit before " + target + " sessions; run it again to continue.";
-        status = new Status(status.job(), false, status.started(), now(), target, stored, already, skipped, done, List.copyOf(log));
-        LOG.info(done);
+        return guessed;
     }
 
     // ------------------------------------------------------------------ sectors

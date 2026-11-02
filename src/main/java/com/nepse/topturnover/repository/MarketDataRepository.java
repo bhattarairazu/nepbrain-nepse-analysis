@@ -44,6 +44,24 @@ public class MarketDataRepository {
         return n != null && n > 0;
     }
 
+    public void clearNonTradingDay(LocalDate day) {
+        jdbc.update("DELETE FROM non_trading_day WHERE trade_date = ?", day);
+    }
+
+    public java.util.Set<LocalDate> storedDays(LocalDate from, LocalDate to) {
+        return new java.util.HashSet<>(jdbc.queryForList("SELECT trade_date FROM trading_day WHERE trade_date BETWEEN ? AND ?", LocalDate.class, from, to));
+    }
+
+    public java.util.Set<LocalDate> nonTradingDays(LocalDate from, LocalDate to) {
+        return new java.util.HashSet<>(jdbc.queryForList("SELECT trade_date FROM non_trading_day WHERE trade_date BETWEEN ? AND ?", LocalDate.class, from, to));
+    }
+
+    /** Stored sessions per year: {year, sessions, first, last}. */
+    public List<Object[]> sessionsByYear() {
+        return jdbc.query("SELECT YEAR(trade_date), COUNT(*), MIN(trade_date), MAX(trade_date) FROM trading_day GROUP BY YEAR(trade_date) ORDER BY 1 DESC",
+                (rs, i) -> new Object[] {rs.getInt(1), rs.getInt(2), rs.getObject(3, LocalDate.class), rs.getObject(4, LocalDate.class)});
+    }
+
     public void markNonTradingDay(LocalDate day, String note) {
         jdbc.update("INSERT IGNORE INTO non_trading_day(trade_date, checked_at, note) VALUES (?, ?, ?)",
                 day, LocalDateTime.now().withNano(0), note);

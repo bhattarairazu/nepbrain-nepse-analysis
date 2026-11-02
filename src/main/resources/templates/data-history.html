@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Fetch history')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Fetch history</h1>
+            <p>Downloads past trading sessions from ShareSansar's price page for the dates you choose, newest first, one request every
+                <span th:text="${delay}"></span> seconds so it stays gentle on the site. Sessions already stored are kept and not requested again;
+                weekends, listed holidays and dates already found to have no session are skipped. You can stop at any time and start again
+                later: it continues with the dates still missing.</p>
+        </div>
+    </div>
+
+    <div th:if="${message != null}" class="flash" th:classappend="${ok} ? 'STORED' : 'FAILED'" th:text="${message}"></div>
+
+    <div class="grid-2">
+        <section class="card">
+            <h2>Date range</h2>
+            <form method="get" th:action="@{/data/history}" class="note-form" id="range">
+                <label>From <input type="date" name="from" th:value="${from}" th:max="${today}" required></label>
+                <label>To <input type="date" name="to" th:value="${to}" th:max="${today}" required></label>
+                <label class="wide" style="display:flex;flex-direction:row;align-items:center;gap:8px">
+                    <input type="checkbox" name="recheck" value="true" th:checked="${recheck}" style="width:18px;height:18px;margin:0;flex:none">
+                    Also re-check dates earlier marked as "no session"</label>
+                <div class="wide" style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn" type="submit">Check range</button>
+                    <button class="btn primary" type="submit" th:formaction="@{/data/history/fetch}" formmethod="post"
+                            th:disabled="${job != null and job.running}">Start fetching</button>
+                </div>
+            </form>
+            <p class="small muted" style="margin:12px 0 4px">Quick ranges:</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <a class="btn sm" th:if="${earliest != null}" th:href="@{/data/history(from=${siteStart}, to=${before})}">Everything before what's stored</a>
+                <a class="btn sm" th:href="@{/data/history(from=${today.minusYears(1)}, to=${today})}">Last 1 year</a>
+                <a class="btn sm" th:href="@{/data/history(from=${today.minusYears(3)}, to=${today})}">Last 3 years</a>
+                <a class="btn sm" th:if="${earliest != null}" th:href="@{/data/history(from=${earliest}, to=${today})}">Fill gaps up to today</a>
+            </div>
+
+            <div th:if="${plan != null}" class="note" style="margin:14px 0 0">
+                <b th:text="${@fmt.day(plan.from)} + ' → ' + ${@fmt.day(plan.to)}"></b><br>
+                <span th:text="${plan.stored} + ' sessions already stored · ' + ${plan.toFetch} + ' dates to request'"></span>
+                <span th:if="${plan.knownNoSession > 0}" th:text="' · ' + ${plan.knownNoSession} + ' dates known to have no session (skipped)'"></span><br>
+                <span th:if="${plan.toFetch > 0}" th:text="'About ' + (${plan.minutes >= 90} ? ${plan.minutes / 60} + ' h ' + ${plan.minutes % 60} + ' min' : ${plan.minutes} + ' min')
+                    + '. It stops by itself where the site has no older data (15 trading days in a row without a session).'"></span>
+                <span th:if="${plan.toFetch == 0}">Nothing to fetch in this range.</span>
+            </div>
+        </section>
+
+        <div>
+            <section th:replace="~{fragments/job :: status(${job})}"></section>
+            <form th:if="${job != null and job.running}" method="post" th:action="@{/data/history/stop}" style="margin-top:10px">
+                <button class="btn" type="submit">Stop after the current request</button>
+            </form>
+            <section class="card" th:if="${job == null or job.job == null}">
+                <h2>No job running</h2>
+                <p class="sub">Pick a range and press Start fetching. Progress shows here and the page refreshes itself.</p>
+            </section>
+        </div>
+    </div>
+
+    <section class="card block" style="margin-top:16px">
+        <h2>Stored sessions by year</h2>
+        <p class="sub" th:text="${earliest != null} ? 'Stored now: ' + ${@fmt.day(earliest)} + ' → ' + ${@fmt.day(latest)} + '. NEPSE has roughly 230–250 sessions a year.' : 'Nothing stored yet.'"></p>
+        <div class="table-wrap" th:unless="${years.isEmpty()}">
+            <table>
+                <thead><tr><th>Year</th><th class="num">Sessions</th><th>First</th><th>Last</th><th></th></tr></thead>
+                <tbody>
+                <tr th:each="y : ${years}">
+                    <td><b th:text="${y[0]}"></b></td>
+                    <td class="num" th:text="${y[1]}"></td>
+                    <td class="small" th:text="${@fmt.day(y[2])}"></td>
+                    <td class="small" th:text="${@fmt.day(y[3])}"></td>
+                    <td><a class="btn sm" th:href="@{/data/history(from=${y[0] + '-01-01'}, to=${y[0] + '-12-31'})}">Check this year</a></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>

@@ -118,6 +118,7 @@ public class AdvancedStrategyService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public AdvancedStrategyService(BacktestService backtest, BacktestRepository store) {
         this.backtest = backtest;
@@ -132,7 +133,7 @@ public class AdvancedStrategyService {
         Market m = backtest.data();
         if (m == null || m.dates.length < 80) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         int split = (int) Math.round(m.dates.length * DESIGN_SHARE);
         LocalDate splitDate = m.dates[split];
@@ -181,6 +182,7 @@ public class AdvancedStrategyService {
         for (Setup setup : Setup.values()) results.add(summarise(setup, trades.get(setup), today.get(setup), random));
         cached = new Result(m.dates[0], splitDate, last, m.dates.length, results);
         cachedFor = last;
+        cachedData = m;
         save(cached, trades);
         return Optional.of(cached);
     }

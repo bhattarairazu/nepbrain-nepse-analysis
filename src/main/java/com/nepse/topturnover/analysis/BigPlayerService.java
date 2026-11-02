@@ -83,6 +83,7 @@ public class BigPlayerService {
     private Map<String, Footprint> todayAll = Map.of();
     private List<StageEvent> stageEvents = List.of();
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
     private int cachedFloorsheetDays = -1;
 
     public BigPlayerService(BacktestService backtest, BrokerAnalysisService brokers, BacktestRepository store) {
@@ -96,7 +97,7 @@ public class BigPlayerService {
         if (m == null || m.dates.length < BASELINE + 30) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
         List<LocalDate> fsDays = brokers.days(BROKER_WINDOW);
-        if (cached != null && last.equals(cachedFor) && fsDays.size() == cachedFloorsheetDays) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData && fsDays.size() == cachedFloorsheetDays) return Optional.of(cached);
 
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
         List<Footprint> today = new ArrayList<>();
@@ -180,6 +181,7 @@ public class BigPlayerService {
         events.sort(Comparator.comparing(StageEvent::date).reversed());
         stageEvents = events;
         cachedFor = last;
+        cachedData = m;
         cachedFloorsheetDays = fsDays.size();
         save(cached);
         return Optional.of(cached);

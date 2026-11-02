@@ -114,6 +114,7 @@ public class BreakoutPullbackService {
     private Result cached;
     private List<Event> allEvents = List.of();
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public BreakoutPullbackService(BacktestService backtest, TradeCosts costs, BacktestRepository store) {
         this.backtest = backtest;
@@ -125,7 +126,7 @@ public class BreakoutPullbackService {
         Market m = backtest.data();
         if (m == null || m.dates.length < 80) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
         double[] mEma = Ind.ema(m.index, 50);
@@ -177,6 +178,7 @@ public class BreakoutPullbackService {
                 count(events, Entry.RETEST_TURN), rows, accounts, recent.stream().limit(40).toList(), watch(m, events), signals);
         allEvents = events;
         cachedFor = last;
+        cachedData = m;
         save(cached);
         return Optional.of(cached);
     }

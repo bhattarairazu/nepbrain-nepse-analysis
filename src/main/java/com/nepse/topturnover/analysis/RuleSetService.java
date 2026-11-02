@@ -167,6 +167,7 @@ public class RuleSetService {
     private final BacktestRepository store;
     private Result cached;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public RuleSetService(BacktestService backtest, BacktestRepository store) {
         this.backtest = backtest;
@@ -182,7 +183,7 @@ public class RuleSetService {
         if (m == null || m.dates.length < 60) return Optional.empty();
         int T = m.dates.length;
         LocalDate last = m.dates[T - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         double[] idx100 = Ind.ema(m.index, 100), idx200 = Ind.ema(m.index, 200);
         List<Ctx> stocks = new ArrayList<>();
@@ -245,6 +246,7 @@ public class RuleSetService {
         cached = new Result(m.dates[0], last, T, bh, rows, combine(rows), liquidToday,
                 new Regime(m.index[T - 1], finite(idx100[T - 1]), finite(idx200[T - 1])));
         cachedFor = last;
+        cachedData = m;
         save(cached, trades);
         return Optional.of(cached);
     }

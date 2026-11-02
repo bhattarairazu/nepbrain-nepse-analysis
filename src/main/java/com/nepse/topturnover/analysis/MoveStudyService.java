@@ -130,6 +130,7 @@ public class MoveStudyService {
     private List<Row> allRows = List.of();
     private double cachedBase, cachedThr;
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public MoveStudyService(BacktestService backtest, TradeCosts costs, BacktestRepository store) {
         this.backtest = backtest;
@@ -141,7 +142,7 @@ public class MoveStudyService {
         Market m = backtest.data();
         if (m == null || m.dates.length < MIN_HISTORY + 60) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
         List<Row> rows = rows(m);
@@ -264,6 +265,7 @@ public class MoveStudyService {
         cachedBase = (base * des.size() + oosBase * oos.size()) / (des.size() + oos.size());
         cachedThr = thr;
         cachedFor = last;
+        cachedData = m;
         save(cached);
         return Optional.of(cached);
     }

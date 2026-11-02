@@ -68,6 +68,7 @@ public class BaseBreakoutService {
     private Map<String, Base> current = Map.of();
     private List<Event> allEvents = List.of();
     private LocalDate cachedFor;
+    private Object cachedData; // the price data the result was built from; new history reloads it
 
     public BaseBreakoutService(BacktestService backtest, BacktestRepository store) {
         this.backtest = backtest;
@@ -78,7 +79,7 @@ public class BaseBreakoutService {
         Market m = backtest.data();
         if (m == null || m.dates.length < SQUEEZE_LOOKBACK + 20) return Optional.empty();
         LocalDate last = m.dates[m.dates.length - 1];
-        if (cached != null && last.equals(cachedFor)) return Optional.of(cached);
+        if (cached != null && last.equals(cachedFor) && m == cachedData) return Optional.of(cached);
 
         int T = m.dates.length, split = (int) Math.round(T * AdvancedStrategyService.DESIGN_SHARE);
         List<Base> today = new ArrayList<>();
@@ -157,6 +158,7 @@ public class BaseBreakoutService {
         current = today.stream().collect(java.util.stream.Collectors.toMap(Base::symbol, b -> b, (a, b) -> a));
         allEvents = List.copyOf(recent);
         cachedFor = last;
+        cachedData = m;
         save(cached, kinds);
         return Optional.of(cached);
     }
