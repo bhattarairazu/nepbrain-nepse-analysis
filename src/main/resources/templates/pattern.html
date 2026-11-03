@@ -7,66 +7,71 @@
     <div class="page-head">
         <div>
             <h1>Pattern scanner</h1>
-            <p>Stocks that match the "quiet coil + rising turnover" rule at the latest close. The picks are recorded automatically right after each
+            <p>Stocks that match the rules found in six years of prices, at the latest close. The picks are recorded automatically right after each
                 daily crawl, so you can check later what was recommended and how it turned out.</p>
         </div>
     </div>
     <nav th:replace="~{fragments/pattern :: tabs('today')}"></nav>
     <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
-    <details th:replace="~{fragments/pattern :: rule}"></details>
+    <details th:replace="~{fragments/pattern :: rules(${rules})}"></details>
 
     <div th:if="${t == null}" class="card empty">No stored prices yet.</div>
     <th:block th:if="${t != null}">
-        <div class="note" th:unless="${t.recorded}">
+        <div class="note" th:classappend="${t.weakMarket} ? '' : 'calm'">
+            <b th:text="'Market at the close of ' + ${@fmt.day(t.date)} + ': '"></b>
+            <span th:text="'the equal-weight market is ' + ${@fmt.pct(t.marketVsEma50Pct)} + (${t.weakMarket} ? ' below' : ' above') + ' its 50-session average.'"></span>
+            <span th:if="${t.weakMarket}">The weak-market rules (Q and D) are <b>on</b>; over six years they worked best in markets like this.</span>
+            <span th:unless="${t.weakMarket}">The weak-market rules (Q and D) are <b>off</b> until the market dips below its average; the tight-range rule (T) works in any market.</span>
+        </div>
+        <div class="note" th:if="${t.rules.?[!recorded].size() > 0}">
             Today's picks are not recorded yet (they are recorded automatically after the daily crawl).
             <form method="post" th:action="@{/pattern/record}" style="display:inline"><button class="btn sm primary" type="submit">Record them now</button></form>
         </div>
 
-        <section class="card block">
-            <h2>Picks at the close of <span th:text="${@fmt.day(t.date)}"></span> <span class="muted small" th:text="${t.matches.size()} + ' of ' + ${t.scanned} + ' stocks'"></span></h2>
-            <p class="sub">Buy at the next open; target and stop are shown from today's close (the real ones are set from your entry price).</p>
-            <p th:if="${t.matches.isEmpty()}" class="muted">No stock matches all seven conditions today. The near misses are below.</p>
-            <div class="table-wrap" th:unless="${t.matches.isEmpty()}">
+        <section class="card block" th:each="rt : ${t.rules}" th:with="r=${rt.rule}">
+            <h2><span class="rule-letter" th:text="${r.letter}"></span> <span th:text="${r.title}"></span>
+                <span class="muted small" th:text="${rt.matches.size()} + ' of ' + ${t.scanned}"></span>
+                <span class="pill bad" th:unless="${rt.active}">off: market not weak</span></h2>
+            <p class="sub" th:text="${r.idea}"></p>
+            <p th:if="${rt.matches.isEmpty()}" class="muted small" th:text="${rt.active} ? 'No stock matches today.' : 'No picks while the market is above its 50-session average.'"></p>
+            <div class="table-wrap" th:unless="${rt.matches.isEmpty()}">
                 <table>
                     <thead><tr><th>Stock</th><th class="num">Close</th><th class="num">Target +10%</th><th class="num">Stop −7%</th><th class="num">ATR</th>
-                        <th class="num">20d range</th><th class="num">5 sessions</th><th class="num">Turnover</th><th class="num">Up/down vol</th><th class="num">RSI</th><th></th></tr></thead>
+                        <th class="num">20d range</th><th class="num">From 60d high · low</th><th class="num">Turnover</th><th class="num">RSI</th><th>Warnings</th><th></th></tr></thead>
                     <tbody>
-                    <tr th:each="e : ${t.matches}">
+                    <tr th:each="e : ${rt.matches}" th:with="x=${e.x}">
                         <td class="sym"><a th:href="@{/stock/{s}(s=${e.symbol})}" th:text="${e.symbol}"></a><small th:text="${e.sector}"></small></td>
                         <td class="num"><b th:text="${@fmt.price(e.close)}"></b></td>
                         <td class="num pos" th:text="${@fmt.price(e.target())}"></td>
                         <td class="num neg" th:text="${@fmt.price(e.stop())}"></td>
-                        <td class="num" th:text="${@fmt.decimal(e.atrPct, 2)} + '%'"></td>
-                        <td class="num" th:text="${@fmt.decimal(e.range20Pct, 1)} + '%'"></td>
-                        <td class="num" th:classappend="${@fmt.tone(e.ret5Pct)}" th:text="${@fmt.pct(e.ret5Pct)}"></td>
-                        <td class="num"><b th:text="${@fmt.ratio(e.turnoverX)}"></b><small class="muted" style="display:block" th:text="${@fmt.money(e.turnover)}"></small></td>
-                        <td class="num" th:classappend="${e.updownVol != null and e.updownVol >= 1.2} ? 'pos' : (${e.updownVol != null and e.updownVol < 0.8} ? 'neg' : '')"
-                            th:text="${e.updownVol != null} ? ${@fmt.decimal(e.updownVol, 2)} : '—'"></td>
-                        <td class="num" th:text="${e.rsi14 != null} ? ${@fmt.decimal(e.rsi14, 0)} : '—'"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.atrPct, 2)} + '%'"></td>
+                        <td class="num" th:text="${@fmt.decimal(x.range20Pct, 1)} + '%'"></td>
+                        <td class="num small" th:text="${@fmt.pct(x.fromHigh60Pct)} + ' · ' + ${@fmt.pct(x.fromLow60Pct)}"></td>
+                        <td class="num"><b th:text="${@fmt.ratio(x.turnoverX)}"></b><small class="muted" style="display:block" th:text="${@fmt.money(x.turnover)}"></small></td>
+                        <td class="num" th:text="${x.rsi14 != null} ? ${@fmt.decimal(x.rsi14, 0)} : '—'"></td>
+                        <td class="small"><span th:each="w : ${x.warnings()}" class="pill warn" style="margin:1px" th:text="${w}"></span></td>
                         <td><a class="btn sm" th:href="@{/pattern/check(symbols=${e.symbol})}">Details</a></td>
                     </tr>
                     </tbody>
                 </table>
             </div>
-        </section>
-
-        <section class="card block" th:unless="${t.nearMisses.isEmpty()}">
-            <h2>Near misses <span class="muted small" th:text="${t.nearMisses.size()}"></span></h2>
-            <p class="sub">Liquid stocks that pass six of the seven conditions; the one they miss is shown. Most traded first.</p>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>Stock</th><th class="num">Close</th><th>Misses</th><th class="num">Value</th><th>Needs</th></tr></thead>
-                    <tbody>
-                    <tr th:each="e : ${t.nearMisses}" th:with="miss=${e.checks.?[!pass][0]}">
-                        <td class="sym"><a th:href="@{/pattern/check(symbols=${e.symbol})}" th:text="${e.symbol}"></a><small th:text="${e.sector}"></small></td>
-                        <td class="num" th:text="${@fmt.price(e.close)}"></td>
-                        <td th:text="${miss.name}"></td>
-                        <td class="num neg" th:text="${miss.shown}"></td>
-                        <td class="small muted" th:text="${miss.need}"></td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
+            <details th:unless="${rt.nearMisses.isEmpty()}" style="margin-top:10px">
+                <summary class="small" th:text="'Near misses: ' + ${rt.nearMisses.size()} + ' liquid stocks missing one condition'"></summary>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Stock</th><th class="num">Close</th><th>Misses</th><th class="num">Value</th><th>Needs</th></tr></thead>
+                        <tbody>
+                        <tr th:each="e : ${rt.nearMisses}" th:with="miss=${e.firstMiss()}">
+                            <td class="sym"><a th:href="@{/pattern/check(symbols=${e.symbol})}" th:text="${e.symbol}"></a><small th:text="${e.sector}"></small></td>
+                            <td class="num" th:text="${@fmt.price(e.close)}"></td>
+                            <td th:text="${miss.name}"></td>
+                            <td class="num neg" th:text="${miss.shown}"></td>
+                            <td class="small muted" th:text="${miss.need}"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
         </section>
     </th:block>
 </main>

@@ -478,3 +478,9 @@ tr.muted td, .table-wrap.muted { opacity: .62; }
 .date-chips a.on i { color: #fff; }
 .progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .progress span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.rule-letter { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12px; }
+.note.calm { background: var(--surface-2); }
+details.rule-check { border-top: 1px solid var(--border); padding: 8px 0; }
+details.rule-check > summary { cursor: pointer; }
+.yr { display: inline-block; margin: 1px 6px 1px 0; white-space: nowrap; }

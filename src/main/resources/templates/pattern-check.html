@@ -7,8 +7,8 @@
     <div class="page-head">
         <div>
             <h1>Check stocks</h1>
-            <p>Run the pattern rule on any stocks you name: each condition at the latest close, the last 30 sessions, and every past pick for the stock
-                with what happened next.</p>
+            <p>Run every pattern rule on the stocks you name: each condition at the latest close, which rules matched over the last 30 sessions,
+                and every past pick for the stock with what happened next.</p>
         </div>
     </div>
     <nav th:replace="~{fragments/pattern :: tabs('check')}"></nav>
@@ -21,19 +21,25 @@
         </form>
         <p class="small muted" style="margin:8px 0 0">Separate several symbols with commas or spaces.</p>
     </section>
-    <details th:replace="~{fragments/pattern :: rule}"></details>
+    <details th:replace="~{fragments/pattern :: rules(${rules})}"></details>
 
-    <section class="card block" th:each="x : ${results}" th:with="sym=${x[0]}, c=${x[1]}">
+    <section class="card block" th:each="res : ${results}" th:with="sym=${res[0]}, c=${res[1]}">
         <h2><a th:href="@{/stock/{s}(s=${sym})}" th:text="${sym}"></a>
-            <th:block th:if="${c != null}"><small class="muted" th:text="${c.now.name} + ' · ' + ${c.now.sector}"></small></th:block></h2>
+            <small class="muted" th:if="${c != null}" th:text="${c.name} + ' · ' + ${c.sector}"></small></h2>
         <p th:if="${c == null}" class="muted">No stored prices for this symbol.</p>
-        <th:block th:if="${c != null}" th:with="e=${c.now}">
-            <p th:if="${e.note != null}" class="muted" th:text="${e.note}"></p>
-            <th:block th:if="${e.note == null}">
-                <p><span class="pill" th:classappend="${e.match} ? 'good' : (${e.passed() >= 5} ? 'warn' : 'bad')"
-                         th:text="${e.match} ? 'Matches the rule: buy at the next open' : 'No: ' + ${e.passed()} + ' of ' + ${e.checks.size()} + ' conditions'"></span>
-                    <span class="muted small" th:text="' at the close of ' + ${@fmt.day(e.date)} + ', ' + ${@fmt.price(e.close)}"></span>
-                    <span class="small" th:if="${e.match}" th:text="' · target ' + ${@fmt.price(e.target())} + ', stop ' + ${@fmt.price(e.stop())} + ' (from this close)'"></span></p>
+        <p th:if="${c != null and c.now == null}" class="muted">Needs at least 65 stored sessions.</p>
+        <th:block th:if="${c != null and c.now != null}">
+            <p class="small"><span class="muted" th:text="'At the close of ' + ${@fmt.day(c.date)} + ', ' + ${@fmt.price(c.now.close)} + '. '"></span>
+                <span th:if="${c.now.warnings().isEmpty()}" class="muted">No warning signs.</span>
+                <span th:each="w : ${c.now.warnings()}" class="pill warn" style="margin:1px" th:text="${w}"></span></p>
+
+            <details th:each="e : ${c.rules}" class="rule-check" th:open="${e.match}">
+                <summary><span class="rule-letter" th:text="${e.rule.letter}"></span> <b th:text="${e.rule.title}"></b>
+                    <span class="pill" th:classappend="${e.match} ? 'good' : (${e.passed() >= e.checks.size() - 1} ? 'warn' : 'bad')"
+                          th:text="${e.match} ? 'Matches: buy at the next open' : ${e.passed()} + ' of ' + ${e.checks.size()}"></span>
+                    <span class="small" th:if="${e.match}" th:text="' target ' + ${@fmt.price(e.target())} + ', stop ' + ${@fmt.price(e.stop())}"></span>
+                    <span class="small muted" th:if="${c.pastByRule.containsKey(e.rule)}"> · past on this stock:
+                        <span th:replace="~{fragments/pattern :: resultline(${c.pastByRule.get(e.rule)})}"></span></span></summary>
                 <div class="table-wrap">
                     <table>
                         <thead><tr><th></th><th>Condition</th><th class="num">Now</th><th>Needs</th></tr></thead>
@@ -47,21 +53,18 @@
                         </tbody>
                     </table>
                 </div>
-            </th:block>
+            </details>
 
-            <h3 class="small" style="margin-top:14px">Last 30 sessions (conditions met)</h3>
+            <h3 class="small" style="margin-top:14px">Last 30 sessions: rules matched</h3>
             <div class="pattern-strip">
-                <span th:each="r : ${c.recent}" th:if="${r.note == null}" th:classappend="${r.match} ? 'm' : (${r.passed() >= 6} ? 'n' : '')"
-                      th:title="${@fmt.day(r.date)} + ': ' + ${r.passed()} + ' of 7' + (${r.match} ? ' · PICK' : '')">
-                    <b th:text="${r.passed()}"></b><small th:text="${@fmt.shortDay(r.date)}"></small></span>
+                <span th:each="d : ${c.recent}" th:classappend="${d.matched.isEmpty()} ? '' : 'm'" th:title="${@fmt.day(d.date)}">
+                    <b th:text="${d.matched.isEmpty()} ? '·' : ${#strings.listJoin(d.matched.![letter], '')}"></b><small th:text="${@fmt.shortDay(d.date)}"></small></span>
             </div>
 
-            <h3 class="small" style="margin-top:14px">Past picks for <span th:text="${sym}"></span>
-                <span class="muted" th:if="${c.pastSummary.closed > 0}"
-                      th:text="' · ' + ${c.pastSummary.picks} + ' picks = ' + ${c.pastSummary.trades} + ' trades (one position at a time); ' + ${c.pastSummary.closed} + ' closed, ' + ${@fmt.decimal(c.pastSummary.winPct, 0)} + '% won, average ' + ${@fmt.pct(c.pastSummary.avgNetPct)}"></span></h3>
-            <p th:if="${c.past.isEmpty()}" class="muted small">The rule never picked this stock in the stored history.</p>
-            <div class="table-wrap" th:unless="${c.past.isEmpty()}">
-                <table th:replace="~{fragments/pattern :: picks(${c.past})}"></table>
+            <h3 class="small" style="margin-top:14px">Past picks for <span th:text="${sym}"></span></h3>
+            <p th:if="${c.past.isEmpty()}" class="muted small">No rule picked this stock in the stored history.</p>
+            <div class="table-wrap" th:unless="${c.past.isEmpty()}" style="max-height:480px;overflow-y:auto">
+                <table th:replace="~{fragments/pattern :: picks(${c.past}, true)}"></table>
             </div>
         </th:block>
     </section>

@@ -52,7 +52,8 @@ public class DiscoveryService {
             {"cmf", "Chaikin Money Flow (20)"}, {"closeInRange", "close within the day's range (0 = low, 1 = high)"},
             {"tradeSizeX", "average trade size, 5 sessions ÷ the 60 before"}, {"fromLow60", "% above the 60-session low"},
             {"fromHigh60", "% below the 60-session high (negative)"}, {"market20", "market (equal-weight) 20-session change, %"},
-            {"sector20", "sector average 20-session change, %"}, {"vsSector20", "stock minus sector 20-session change, %"}};
+            {"sector20", "sector average 20-session change, %"}, {"vsSector20", "stock minus sector 20-session change, %"},
+            {"vsEma200", "close vs 200 EMA, %"}, {"marketVsEma50", "market (equal-weight) vs its 50-session EMA, %"}};
     static final int F = FEATURES.length;
 
     public record Settings(double targetPct, double stopPct, int maxSessions) {}
@@ -62,10 +63,16 @@ public class DiscoveryService {
     }
 
     /** One discovered rule: its conditions and results in the three periods, and the stocks matching it at the latest close. */
-    public record Found(int rank, List<String> conditions, String spec, Stats find, Stats choose, Stats check, List<String> today) {}
+    /** One discovered rule: its conditions, results in the three periods, per calendar year and by market state, and today's matches. */
+    public record Found(int rank, List<String> conditions, String spec, Stats find, Stats choose, Stats check, List<String> today,
+                        Map<Integer, Stats> byYear, Stats weakMarket, Stats strongMarket) {
+        public long yearsPositive() { return byYear.values().stream().filter(x -> x.n() >= 5 && x.avgPct() > 0).count(); }
+        public long yearsJudged() { return byYear.values().stream().filter(x -> x.n() >= 5).count(); }
+    }
 
     public record Result(Long id, LocalDateTime at, LocalDate from, LocalDate to, int sessions, int stocks, int stockDays, LocalDate findTo,
-                         LocalDate chooseTo, Settings settings, Stats baseFind, Stats baseChoose, Stats baseCheck, long millis, List<Found> rules) {}
+                         LocalDate chooseTo, Settings settings, Stats baseFind, Stats baseChoose, Stats baseCheck, long millis, List<Found> rules,
+                         Map<Integer, Stats> baseByYear) {}
 
     public record Status(boolean running, String stage, int pct, String message, LocalDateTime started) {
         static final Status IDLE = new Status(false, null, 0, null, null);
@@ -134,6 +141,18 @@ public class DiscoveryService {
             (rows.global[r] < findTo ? find : rows.global[r] < chooseTo ? choose : check).set(r);
         }
 
+        // calendar years and market state (equal-weight market below / above its 50-session EMA), for the result breakdowns
+        Map<Integer, BitSet> years = new java.util.TreeMap<>();
+        BitSet weak = new BitSet(rows.n), strong = new BitSet(rows.n);
+        int mk = Arrays.asList(FEATURES).indexOf(Arrays.stream(FEATURES).filter(f -> f[0].equals("marketVsEma50")).findFirst().get());
+        for (int r = known.nextSetBit(0); r >= 0; r = known.nextSetBit(r + 1)) {
+            years.computeIfAbsent(m.dates[rows.global[r]].getYear(), y -> new BitSet(rows.n)).set(r);
+            float mv = rows.f[mk][r];
+            if (!Float.isNaN(mv)) (mv < 0 ? weak : strong).set(r);
+        }
+        Map<Integer, Stats> baseByYear = new java.util.TreeMap<>();
+        years.forEach((y, bits) -> baseByYear.put(y, base(rows, bits)));
+
         stage("Building candidate conditions", 30);
         List<Cond> conds = conditions(rows, find);
         int minFind = Math.max(100, find.cardinality() / 200);
@@ -185,12 +204,15 @@ public class DiscoveryService {
             String sig = x.rule().signature(); // skip near-duplicates (same features)
             if (!used.add(sig)) continue;
             Stats chk = trades(rows, x.rule().bits, check);
-            found.add(new Found(++rank, x.rule().texts(), x.rule().spec(), x.find(), x.choose(), chk, today(rows, x.rule(), T - 1)));
+            Map<Integer, Stats> byYear = new java.util.TreeMap<>();
+            years.forEach((y, bits) -> byYear.put(y, trades(rows, x.rule().bits, bits)));
+            found.add(new Found(++rank, x.rule().texts(), x.rule().spec(), x.find(), x.choose(), chk, today(rows, x.rule(), T - 1), byYear,
+                    trades(rows, x.rule().bits, weak), trades(rows, x.rule().bits, strong)));
         }
 
         Result res = new Result(null, LocalDateTime.now().withNano(0), m.dates[first], m.dates[T - 1], T, rows.stocks, known.cardinality(),
                 m.dates[findTo], m.dates[chooseTo], set, base(rows, find), base(rows, choose), base(rows, check),
-                System.currentTimeMillis() - t0, found);
+                System.currentTimeMillis() - t0, found, baseByYear);
         stage("Saving", 97);
         long id = repo.save(res);
         LOG.info("Discovery run {}: {} stock-days, {} rules in {} ms", id, known.cardinality(), found.size(), res.millis());
@@ -219,6 +241,7 @@ public class DiscoveryService {
 
     static Rows build(Market m, Settings set) {
         int T = m.dates.length;
+        double[] mkt = PatternService.marketEma(m);
         List<Series> list = m.series.values().stream().filter(s -> Sectors.isEquity(s.sector) && s.size() > MIN_HISTORY).toList();
         // sector average 20-session change per session
         Map<String, double[]> secSum = new HashMap<>();
@@ -251,7 +274,7 @@ public class DiscoveryService {
                 int r = rows.n++;
                 any = true;
                 int g = s.globalIndex[i];
-                double[] v = features(m, s, x, size, i, sum == null ? Double.NaN : cnt[g] > 0 ? sum[g] / cnt[g] : Double.NaN);
+                double[] v = features(m, mkt, s, x, size, i, sum == null ? Double.NaN : cnt[g] > 0 ? sum[g] / cnt[g] : Double.NaN);
                 for (int k = 0; k < F; k++) rows.f[k][r] = (float) v[k];
                 double[] out = bracket(s, i, set);
                 rows.net[r] = out == null ? Double.NaN : out[0];
@@ -264,7 +287,7 @@ public class DiscoveryService {
         return rows;
     }
 
-    static double[] features(Market m, Series s, RuleSetService.Ctx x, double[] size, int i, double sector20) {
+    static double[] features(Market m, double[] mkt, Series s, RuleSetService.Ctx x, double[] size, int i, double sector20) {
         double c = s.close[i];
         double hi20 = Double.NEGATIVE_INFINITY, lo20 = Double.POSITIVE_INFINITY, lo60 = Double.POSITIVE_INFINITY, hi60 = Double.NEGATIVE_INFINITY;
         for (int k = i - 19; k <= i; k++) { hi20 = Math.max(hi20, hi(s, k)); lo20 = Math.min(lo20, lo(s, k)); }
@@ -296,7 +319,8 @@ public class DiscoveryService {
                 h > l ? (c - l) / (h - l) : Double.NaN,
                 z5 != null && z60 != null && z60 > 0 ? z5 / z60 : Double.NaN,
                 (c / lo60 - 1) * 100, (c / hi60 - 1) * 100,
-                g >= 20 ? (m.index[g] / m.index[g - 20] - 1) * 100 : Double.NaN, sector20, ret20 - sector20};
+                g >= 20 ? (m.index[g] / m.index[g - 20] - 1) * 100 : Double.NaN, sector20, ret20 - sector20,
+                (c / x.ema200[i] - 1) * 100, Double.isNaN(mkt[g]) ? Double.NaN : (m.index[g] / mkt[g] - 1) * 100};
     }
 
     /** {net %, exit index}: buy at the next open, target on the high, stop on the close, time exit; null while still open. */

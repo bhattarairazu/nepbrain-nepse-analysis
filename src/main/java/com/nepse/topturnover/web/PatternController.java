@@ -16,9 +16,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.nepse.topturnover.analysis.PatternService;
+import com.nepse.topturnover.analysis.PatternService.Rule;
 import com.nepse.topturnover.repository.PatternRepository;
 
-/** Pattern scanner: today's picks, the rule applied to stocks you name, and every past day's picks with how they did. */
+/** Pattern scanner: today's picks per rule, the rules applied to stocks you name, and every past day's picks with how they did. */
 @Controller
 public class PatternController {
     private final PatternService patterns;
@@ -30,6 +31,7 @@ public class PatternController {
     @GetMapping("/pattern")
     public String today(Model model) {
         model.addAttribute("active", "pattern");
+        model.addAttribute("rules", Rule.active());
         patterns.today().ifPresent(t -> model.addAttribute("t", t));
         return "pattern";
     }
@@ -41,16 +43,17 @@ public class PatternController {
     }
 
     @PostMapping("/pattern/replay")
-    public String replay(RedirectAttributes flash) {
+    public String replay(@RequestParam(required = false) String rule, RedirectAttributes flash) {
         flash.addFlashAttribute("message", patterns.replayAll()
                 + " past pick(s) reconstructed from stored prices (marked REPLAY). Sessions already recorded kept their record.");
-        return "redirect:/pattern/history";
+        return "redirect:/pattern/history" + (rule == null ? "" : "?rule=" + rule);
     }
 
     @GetMapping("/pattern/check")
     public String check(@RequestParam(required = false) String symbols, Model model) {
         model.addAttribute("active", "patterncheck");
         model.addAttribute("symbols", symbols == null ? "" : symbols);
+        model.addAttribute("rules", Rule.active());
         List<Object[]> results = new ArrayList<>();
         if (symbols != null) {
             Set<String> list = new LinkedHashSet<>();
@@ -62,25 +65,17 @@ public class PatternController {
     }
 
     @GetMapping("/pattern/history")
-    public String history(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, Model model) {
+    public String history(@RequestParam(required = false) String rule,
+                          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, Model model) {
         model.addAttribute("active", "patternhistory");
-        List<PatternRepository.DateCount> dates = patterns.dates();
+        Rule r = Rule.of(rule).orElse(Rule.active().get(0));
+        model.addAttribute("rule", r);
+        model.addAttribute("allRules", Rule.values());
+        List<PatternRepository.DateCount> dates = patterns.dates(r);
         model.addAttribute("dates", dates);
         LocalDate d = date != null ? date : dates.isEmpty() ? null : dates.get(0).date();
-        if (d != null) model.addAttribute("h", patterns.history(d));
-        if (!dates.isEmpty()) {
-            List<PatternService.Pick> all = patterns.between(dates.get(dates.size() - 1).date(), dates.get(0).date());
-            model.addAttribute("allSummary", summary(all, null));
-            model.addAttribute("liveSummary", summary(all, "LIVE"));
-            model.addAttribute("replaySummary", summary(all, "REPLAY"));
-            model.addAttribute("replayAfter", PatternService.summarise(all.stream()
-                    .filter(p -> p.row().source().equals("REPLAY") && !p.row().date().isBefore(PatternService.FOUND_UNTIL)).toList()));
-            model.addAttribute("foundUntil", PatternService.FOUND_UNTIL);
-        }
+        if (d != null) model.addAttribute("h", patterns.history(r, d));
+        model.addAttribute("track", patterns.track(r));
         return "pattern-history";
-    }
-
-    private static PatternService.Summary summary(List<PatternService.Pick> all, String source) {
-        return PatternService.summarise(source == null ? all : all.stream().filter(p -> p.row().source().equals(source)).toList());
     }
 }

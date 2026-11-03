@@ -380,7 +380,7 @@ public class BacktestService {
                 s.dates[k] = m.dates[r.t()]; s.globalIndex[k] = r.t(); s.byGlobal.put(r.t(), k);
                 s.open[k] = r.o(); s.high[k] = r.h(); s.low[k] = r.l(); s.close[k] = r.c();
                 s.volume[k] = r.v(); s.turnover[k] = r.to(); s.trades[k] = r.tr(); s.change[k] = r.ch();
-                if (Sectors.isEquity(r.sector()) && !Double.isNaN(r.ch()) && Math.abs(r.ch()) <= 10.5) { sum[r.t()] += r.ch(); cnt[r.t()]++; }
+                if (Sectors.isEquity(r.sector()) && !Double.isNaN(r.ch()) && Math.abs(r.ch()) <= 15.5) { sum[r.t()] += r.ch(); cnt[r.t()]++; }
             }
             for (int k = 1; k < s.size(); k++) if (Double.isNaN(s.close[k])) s.close[k] = s.close[k - 1];
             double[] prev = list.stream().mapToDouble(Row::pc).toArray();

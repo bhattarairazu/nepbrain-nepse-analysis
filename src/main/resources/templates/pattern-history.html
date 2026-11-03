@@ -7,57 +7,75 @@
     <div class="page-head">
         <div>
             <h1>Past picks &amp; results</h1>
-            <p>Pick a session to see what the scanner recommended that day and what happened since: bought at the next open, sold at the +10% target,
-                the −7% stop or after about 20 sessions. <b>LIVE</b> picks were recorded right after that day's crawl, before anything later was known;
-                <b>REPLAY</b> picks were reconstructed afterwards from stored prices.</p>
+            <p>Pick a rule and a session to see what the scanner recommended that day and what happened since: bought at the next open, sold at the +10%
+                target, the −7% stop or after about 20 sessions. <b>LIVE</b> picks were recorded right after that day's crawl, before anything later was
+                known; <b>REPLAY</b> picks were reconstructed afterwards from stored prices.</p>
         </div>
     </div>
     <nav th:replace="~{fragments/pattern :: tabs('history')}"></nav>
     <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
 
-    <section class="card block" th:if="${allSummary != null}">
-        <h2>Track record</h2>
+    <div class="date-chips" style="margin:0 0 14px">
+        <a th:each="r : ${allRules}" th:href="@{/pattern/history(rule=${r.code})}" th:classappend="${r == rule} ? 'on'"
+           th:text="${r.letter} + ' · ' + ${r.title}"></a>
+    </div>
+
+    <section class="card block">
+        <h2>Track record: <span th:text="${rule.title}"></span></h2>
+        <p class="sub" th:text="${rule.evidence}"></p>
         <div class="table-wrap">
             <table>
-                <thead><tr><th>Source</th><th class="num">Picks</th><th class="num">Trades</th><th class="num">Closed</th><th class="num">Won</th><th class="num">Avg net</th><th class="num">Median</th>
-                    <th class="num">Target hit</th><th class="num">Stopped</th><th class="num">Still open</th></tr></thead>
+                <thead><tr><th>Picks</th><th class="num">Picks</th><th class="num">Trades</th><th class="num">Closed</th><th class="num">Won</th><th class="num">Avg net</th>
+                    <th class="num">Median</th><th class="num">Target hit</th><th class="num">Stopped</th><th class="num">Open</th></tr></thead>
                 <tbody>
-                <tr th:each="row : ${ { {'Live', liveSummary}, {'Replay since ' + #temporals.format(foundUntil, 'd MMM yyyy'), replayAfter}, {'Replay, all', replaySummary} } }" th:with="s=${row[1]}">
-                    <td style="white-space:normal;min-width:110px"><b th:text="${row[0]}"></b></td>
-                    <td class="num muted" th:text="${s.picks}"></td>
-                    <td class="num" th:text="${s.trades}"></td>
-                    <td class="num" th:text="${s.closed}"></td>
-                    <td class="num" th:text="${s.closed > 0} ? ${@fmt.decimal(s.winPct, 0)} + '%' : '—'"></td>
-                    <td class="num" th:classappend="${@fmt.tone(s.avgNetPct)}"><b th:text="${s.closed > 0} ? ${@fmt.pct(s.avgNetPct)} : '—'"></b></td>
-                    <td class="num muted" th:text="${s.closed > 0} ? ${@fmt.pct(s.medianNetPct)} : '—'"></td>
-                    <td class="num pos" th:text="${s.targets}"></td>
-                    <td class="num neg" th:text="${s.stops}"></td>
-                    <td class="num" th:text="${s.open}"></td>
+                <tr th:with="s=${track.live}" style="background:var(--pos-soft)">
+                    <td><b>Live</b></td>
+                    <td th:replace="~{:: statcells(${s})}"></td>
+                </tr>
+                <tr th:with="s=${track.replay}">
+                    <td><b>Replay, all years</b></td>
+                    <td th:replace="~{:: statcells(${s})}"></td>
+                </tr>
+                <tr th:each="y : ${track.replayByYear}" th:with="s=${y.value}">
+                    <td class="small" th:text="'Replay ' + ${y.key}"></td>
+                    <th:block th:fragment="statcells(s)">
+                        <td class="num muted" th:text="${s.picks}"></td>
+                        <td class="num" th:text="${s.trades}"></td>
+                        <td class="num" th:text="${s.closed}"></td>
+                        <td class="num" th:text="${s.closed > 0} ? ${@fmt.decimal(s.winPct, 0)} + '%' : '—'"></td>
+                        <td class="num" th:classappend="${@fmt.tone(s.avgNetPct)}"><b th:text="${s.closed > 0} ? ${@fmt.pct(s.avgNetPct)} : '—'"></b></td>
+                        <td class="num muted" th:text="${s.closed > 0} ? ${@fmt.pct(s.medianNetPct)} : '—'"></td>
+                        <td class="num pos" th:text="${s.targets}"></td>
+                        <td class="num neg" th:text="${s.stops}"></td>
+                        <td class="num" th:text="${s.open}"></td>
+                    </th:block>
                 </tr>
                 </tbody>
             </table>
         </div>
-        <p class="small muted"><b>Live</b> picks were recorded right after their session: the honest test. <b>Replay since</b> covers sessions the rule was not found on.
-            <b>Trades</b> count one position per stock: a pick made while the same stock is still held from an earlier pick is marked
-            "Already held" and not counted again. Closed trades only in the averages, after 0.8% charges, before tax. The full replay includes
-            the months the rule was found on, so it flatters the rule.</p>
+        <p class="small muted"><b>Live</b> picks were recorded right after their session: the honest test going forward. <b>Trades</b> count one position per
+            stock at a time: a pick made while the same stock is still held from an earlier pick of this rule is marked "Already held" and not counted again.
+            Closed trades only in the averages, after 0.8% charges, before tax. The replay covers the years the rule was found on, so it flatters the rule.</p>
     </section>
 
     <section class="card block">
         <h2>Pick a session</h2>
         <form method="get" th:action="@{/pattern/history}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="hidden" name="rule" th:value="${rule.code}">
             <input type="date" name="date" th:value="${h != null} ? ${h.date} : ''" required aria-label="Session date">
             <button class="btn primary" type="submit">Show</button>
         </form>
         <div class="date-chips" th:unless="${dates.isEmpty()}">
-            <a th:each="d, st : ${dates}" th:if="${st.index < 80}" th:href="@{/pattern/history(date=${d.date})}"
+            <a th:each="d, st : ${dates}" th:if="${st.index < 80}" th:href="@{/pattern/history(rule=${rule.code}, date=${d.date})}"
                th:classappend="${h != null and h.date == d.date} ? 'on'" th:title="${d.live > 0} ? ${d.live} + ' recorded live' : 'replay'">
-                <span th:text="${@fmt.shortDay(d.date)}"></span> <b th:text="${d.picks}"></b><i th:if="${d.live > 0}">●</i></a>
+                <span th:text="${@fmt.shortDay(d.date)} + (${d.date.year != #temporals.year(#temporals.createNow())} ? ' ' + ${d.date.year} : '')"></span> <b th:text="${d.picks}"></b><i th:if="${d.live > 0}">●</i></a>
         </div>
-        <p th:if="${dates.isEmpty()}" class="muted">Nothing recorded yet. Picks are recorded after each daily crawl; you can also reconstruct the past from stored prices:</p>
+        <p th:if="${dates.isEmpty()}" class="muted">Nothing recorded for this rule yet. Picks are recorded after each daily crawl; you can also reconstruct the past:</p>
         <form method="post" th:action="@{/pattern/replay}" style="margin-top:10px">
-            <button class="btn sm" type="submit">Reconstruct past picks from stored prices</button>
-            <span class="small muted">Adds REPLAY picks for every stored session; sessions already recorded keep their record.</span>
+            <input type="hidden" name="rule" th:value="${rule.code}">
+            <button class="btn sm" type="submit" th:unless="${rule.retired}">Reconstruct past picks from stored prices</button>
+            <span class="small muted" th:unless="${rule.retired}">Adds REPLAY picks of every active rule for every stored session; sessions already recorded keep their record.</span>
+            <span class="small muted" th:if="${rule.retired}">This rule is retired: no new picks are recorded.</span>
         </form>
     </section>
 
@@ -67,7 +85,7 @@
            th:text="(${h.summary.repeats > 0} ? ${h.summary.repeats} + ' already held from earlier picks; ' : '') + ${h.summary.closed} + ' closed (' + ${h.summary.targets} + ' hit the target, ' + ${h.summary.stops} + ' stopped), ' + ${h.summary.open} + ' still open, prices up to ' + ${@fmt.day(h.latest)} + '.'"></p>
         <p th:if="${h.picks.isEmpty()}" class="muted">No picks recorded for this session.</p>
         <div class="table-wrap" th:unless="${h.picks.isEmpty()}">
-            <table th:replace="~{fragments/pattern :: picks(${h.picks})}"></table>
+            <table th:replace="~{fragments/pattern :: picks(${h.picks}, false)}"></table>
         </div>
     </section>
 </main>

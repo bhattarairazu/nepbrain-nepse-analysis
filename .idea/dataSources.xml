@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="nepse_analysis@localhost" uuid="553351b2-c521-4c3a-9977-0a8426170d85">
+    <data-source source="LOCAL" name="@localhost" uuid="50ed98c4-061b-434f-935d-93523ba67487">
       <driver-ref>mysql.8</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>com.mysql.cj.jdbc.Driver</jdbc-driver>
-      <jdbc-url>jdbc:mysql://localhost:3306/nepse_analysis</jdbc-url>
+      <jdbc-url>jdbc:mysql://localhost:3306/</jdbc-url>
       <jdbc-additional-properties>
         <property name="com.intellij.clouds.kubernetes.db.host.port" />
         <property name="com.intellij.clouds.kubernetes.db.enabled" value="false" />

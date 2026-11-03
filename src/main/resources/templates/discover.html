@@ -54,7 +54,9 @@
         <p class="small">Every liquid stock-day as a trade (the baseline): find
             <b th:classappend="${@fmt.tone(r.baseFind.avgPct)}" th:text="${@fmt.pct(r.baseFind.avgPct)}"></b>, choose
             <b th:classappend="${@fmt.tone(r.baseChoose.avgPct)}" th:text="${@fmt.pct(r.baseChoose.avgPct)}"></b>, check
-            <b th:classappend="${@fmt.tone(r.baseCheck.avgPct)}" th:text="${@fmt.pct(r.baseCheck.avgPct)}"></b>. A rule must beat these.</p>
+            <b th:classappend="${@fmt.tone(r.baseCheck.avgPct)}" th:text="${@fmt.pct(r.baseCheck.avgPct)}"></b>. A rule must beat these.
+            <span th:unless="${r.baseByYear.isEmpty()}" style="display:block">By year:
+                <span th:each="y : ${r.baseByYear}" class="yr" th:classappend="${@fmt.tone(y.value.avgPct)}" th:text="${y.key} + ' ' + ${@fmt.pct(y.value.avgPct)}"></span></span></p>
         <p th:if="${r.rules.isEmpty()}" class="muted">No rule was profitable in the find period with enough trades in the choose period.</p>
         <div class="table-wrap" th:unless="${r.rules.isEmpty()}">
             <table>
@@ -66,7 +68,15 @@
                     <td><b th:text="${f.rank}"></b></td>
                     <td class="small" style="white-space:normal;min-width:260px"><span th:each="c : ${f.conditions}" th:text="'• ' + ${c}" style="display:block"></span>
                         <span class="muted" style="display:block;margin-top:4px" th:text="'find ' + ${@fmt.pct(f.find.avgPct)} + ' · choose ' + ${@fmt.pct(f.choose.avgPct)}
-                            + ' · check ' + (${f.check.n > 0} ? ${@fmt.pct(f.check.avgPct)} + ' (' + ${f.check.n} + ' trades)' : '—')"></span></td>
+                            + ' · check ' + (${f.check.n > 0} ? ${@fmt.pct(f.check.avgPct)} + ' (' + ${f.check.n} + ' trades)' : '—')"></span>
+                        <span style="display:block;margin-top:4px" th:unless="${f.byYear.isEmpty()}">
+                            <b th:text="${f.yearsPositive()} + ' of ' + ${f.yearsJudged()} + ' years positive:'"></b>
+                            <span th:each="y : ${f.byYear}" th:if="${y.value.n > 0}" class="yr" th:classappend="${y.value.n >= 5} ? (${y.value.avgPct > 0} ? 'pos' : 'neg') : 'muted'"
+                                  th:title="${y.value.n} + ' trades, ' + ${@fmt.decimal(y.value.winPct, 0)} + '% won'"
+                                  th:text="${y.key} + ' ' + ${@fmt.pct(y.value.avgPct)} + ' (' + ${y.value.n} + ')'"></span></span>
+                        <span style="display:block;margin-top:2px" th:if="${f.weakMarket != null}">
+                            weak market <b th:classappend="${@fmt.tone(f.weakMarket.avgPct)}" th:text="${@fmt.pct(f.weakMarket.avgPct)} + ' (' + ${f.weakMarket.n} + ')'"></b>
+                            · strong market <b th:classappend="${@fmt.tone(f.strongMarket.avgPct)}" th:text="${@fmt.pct(f.strongMarket.avgPct)} + ' (' + ${f.strongMarket.n} + ')'"></b></span></td>
                     <td class="num" th:text="${f.find.n}"></td>
                     <td class="num" th:text="${@fmt.decimal(f.find.winPct, 0)} + '%'"></td>
                     <td class="num" th:style="${@fmt.heat(f.find.avgPct, 4)}" th:text="${@fmt.pct(f.find.avgPct)}"></td>
@@ -87,7 +97,8 @@
             </table>
         </div>
         <p class="small muted">Trades count one position per stock at a time; results after 0.8% charges, before tax. "Held up" = positive in the untouched
-            check period with 10+ trades. Rules that failed there most likely worked by chance.</p>
+            check period with 10+ trades. Rules that failed there most likely worked by chance. The year line shows each calendar year
+            (positive / negative with 5+ trades); a rule that works in most years and in both market states is more trustworthy than one good period.</p>
     </section>
 
     <section class="card block" th:unless="${runs.isEmpty()}">
