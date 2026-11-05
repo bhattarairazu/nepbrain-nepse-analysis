@@ -84,11 +84,12 @@
                 <a th:href="@{/backtest}" th:classappend="${a == 'backtest'} ? 'on'">Backtest</a>
             </div>
         </div>
-        <div class="nav-group" th:classappend="${#lists.contains({'crawl','history'}, a)} ? 'on'">
+        <div class="nav-group" th:classappend="${#lists.contains({'crawl','history','shares'}, a)} ? 'on'">
             <button type="button" class="nav-group-btn" aria-expanded="false">Data</button>
             <div class="nav-panel">
                 <a th:href="@{/crawl}" th:classappend="${a == 'crawl'} ? 'on'">Daily crawl</a>
                 <a th:href="@{/data/history}" th:classappend="${a == 'history'} ? 'on'">Fetch history (from → to)</a>
+                <a th:href="@{/data/shares}" th:classappend="${a == 'shares'} ? 'on'">Listed shares (market cap)</a>
             </div>
         </div>
     </nav>

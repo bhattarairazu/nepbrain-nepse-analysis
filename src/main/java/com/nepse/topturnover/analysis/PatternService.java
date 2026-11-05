@@ -55,6 +55,18 @@ public class PatternService {
                 true, false,
                 "Six years, weak market: 247 trades, +2.4% a trade, 62% won, positive in 4 of 5 years (2023 −1.5). In a strong market +0.6% "
                         + "and positive in only 2 of 6 years."),
+        COILED_NEAR_HIGH("Coiled near the high, before a breakout", "A",
+                "Three months of flat trading just under the 60-session high (like T), in a calm stock (ATR ≤ 3%) whose sector is not "
+                        + "running (sector up ≤ 3.4% in 20 sessions). Bought before any breakout.",
+                false, false,
+                "Six years: 278 trades, +2.8% a trade, 63% won, positive in every year (2022 +5.5, 2023 +4.1, 2024 +4.9, 2025 +3.0, "
+                        + "2026 +1.7). About 1 in 4 broke out within 10 sessions. Buying on the breakout itself lost −0.6% a trade."),
+        PRESSING_HIGH("Pressing the 60-day high", "B",
+                "Still 0–6% under the 60-session high, closing at the upper Bollinger band, without having run up first (≤ +5.8% in 20 "
+                        + "sessions). Bought before the breakout.",
+                false, false,
+                "Six years: 815 trades, +2.2% a trade, 57% won, positive in every year (2021 +3.7, 2022 +3.1, 2023 +2.2, 2024 +4.3, "
+                        + "2025 +2.2, 2026 +0.1). Half broke out within 10 sessions. Found on 2021-2024; 2025-26 +1.0%."),
         QUIET_COIL("Quiet coil (first one-year version, retired)", "q",
                 "The first rule, found on one year of data, without the market filter.", false, true,
                 "Over six years +1.2% a trade but it lost in 2021 and 2025; replaced by the weak-market version.");
@@ -87,7 +99,7 @@ public class PatternService {
     /** The indicator values of one stock at the close of one session (all from data up to that close). */
     public record Metrics(double close, double turnover, Double avgTurnover20, double atrPct, double range20Pct, double ret5Pct, Double macdHistPct,
                           double fromLow60Pct, double fromHigh60Pct, Double turnoverX, Double updownVol, Double rsi14, Double pctB, Double vsEma200Pct,
-                          Double marketVsEma50Pct) {
+                          Double marketVsEma50Pct, Double ret20Pct, Double underLevelPct, Double sectorRet20Pct) {
         public boolean liquid() { return avgTurnover20 != null && avgTurnover20 >= MIN_AVG_TURNOVER && turnover >= MIN_DAY_TURNOVER; }
         public boolean weakMarket() { return marketVsEma50Pct != null && marketVsEma50Pct < 0; }
 
@@ -365,11 +377,15 @@ public class PatternService {
         }
         double band = x.upper[i] - x.lower[i];
         int g = s.globalIndex[i];
+        double level = Double.NEGATIVE_INFINITY; // highest high of the 60 sessions before this one: the breakout level
+        for (int k = i - 60; k <= i - 1; k++) level = Math.max(level, hi(s, k));
+        double[] sec = s.sector == null ? null : sectorRet20(m).get(s.sector);
         return new Metrics(c, to, Indicators.mean(s.turnover, i - 19, i + 1, 10), x.atr14[i] / c * 100, (hi20 / lo20 - 1) * 100,
                 (c / s.close[i - 5] - 1) * 100, Double.isNaN(hist) ? null : hist, (c / lo60 - 1) * 100, (c / hi60 - 1) * 100,
                 t5 != null && t60 != null && t60 > 0 ? t5 / t60 : null, dn > 0 ? up / dn : null, finite(x.rsi14[i]),
                 band > 0 ? (c - x.lower[i]) / band : null, finite((c / x.ema200[i] - 1) * 100),
-                Double.isNaN(mkt[g]) ? null : (m.index[g] / mkt[g] - 1) * 100);
+                Double.isNaN(mkt[g]) ? null : (m.index[g] / mkt[g] - 1) * 100, finite((c / s.close[i - 20] - 1) * 100),
+                level > 0 ? (c / level - 1) * 100 : null, sec == null ? null : finite(sec[g]));
     }
 
     static Eval eval(Rule r, Series s, int i, Metrics x) {
@@ -392,6 +408,24 @@ public class PatternService {
                 checks.add(new Check("Not extended", "≤ 17% above its 60-session low", x.fromLow60Pct(), signed(x.fromLow60Pct()), x.fromLow60Pct() <= 17));
                 checks.add(new Check("Money coming in", "last 5 sessions' turnover ≥ 1.3× the 60 before", x.turnoverX(),
                         x.turnoverX() == null ? "—" : String.format("%.2f×", Math.floor(x.turnoverX() * 100) / 100), x.turnoverX() != null && x.turnoverX() >= 1.3));
+            }
+            case COILED_NEAR_HIGH -> {
+                checks.add(new Check("Near its 60-day high", "within 6.4% of the 60-session high", x.fromHigh60Pct(), signed(x.fromHigh60Pct()),
+                        x.fromHigh60Pct() >= -6.4));
+                checks.add(new Check("Near its 60-day low", "at most 6.4% above the 60-session low", x.fromLow60Pct(), signed(x.fromLow60Pct()),
+                        x.fromLow60Pct() <= 6.4));
+                checks.add(new Check("Calm stock", "ATR(14) ≤ 3% of price", x.atrPct(), pct(x.atrPct()), x.atrPct() <= 3.0));
+                checks.add(new Check("Sector not running", "sector's median stock up ≤ 3.4% in 20 sessions", x.sectorRet20Pct(),
+                        x.sectorRet20Pct() == null ? "—" : signed(x.sectorRet20Pct()), x.sectorRet20Pct() != null && x.sectorRet20Pct() <= 3.4));
+            }
+            case PRESSING_HIGH -> {
+                checks.add(new Check("Just under the breakout level", "0–6% under the highest high of the previous 60 sessions",
+                        x.underLevelPct(), x.underLevelPct() == null ? "—" : signed(x.underLevelPct()),
+                        x.underLevelPct() != null && x.underLevelPct() <= 0 && x.underLevelPct() >= -6));
+                checks.add(new Check("At the upper band", "Bollinger %b ≥ 0.99 (closing at the upper band)", x.pctB(),
+                        x.pctB() == null ? "—" : String.format("%.2f", x.pctB()), x.pctB() != null && x.pctB() >= 0.994));
+                checks.add(new Check("Has not run up", "20-session change ≤ +5.8%", x.ret20Pct(), x.ret20Pct() == null ? "—" : signed(x.ret20Pct()),
+                        x.ret20Pct() != null && x.ret20Pct() <= 5.76));
             }
             case DIP_NEAR_HIGH_WEAK -> {
                 checks.add(new Check("Strong stock", "within 8.3% of its 60-session high", x.fromHigh60Pct(), signed(x.fromHigh60Pct()),
@@ -450,6 +484,36 @@ public class PatternService {
     // indicator arrays per stock, and the market's EMA, are reused while the same price data is loaded
     private static final Map<Series, RuleSetService.Ctx> CTX = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private static final Map<Market, double[]> MARKET = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static final Map<Market, Map<String, double[]>> SECTOR = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /** Per sector, per market session: the median 20-session change of the sector's stocks that traded that session (NaN when unknown). */
+    static Map<String, double[]> sectorRet20(Market m) {
+        return SECTOR.computeIfAbsent(m, k -> {
+            Map<String, List<double[]>> bySector = new java.util.HashMap<>();
+            int days = k.dates.length;
+            for (Series s : k.series.values()) {
+                if (s.sector == null || !Sectors.isEquity(s.sector)) continue;
+                double[] r = new double[days];
+                Arrays.fill(r, Double.NaN);
+                for (int i = 20; i < s.size(); i++) if (s.close[i - 20] > 0) r[s.globalIndex[i]] = (s.close[i] / s.close[i - 20] - 1) * 100;
+                bySector.computeIfAbsent(s.sector, x -> new ArrayList<>()).add(r);
+            }
+            Map<String, double[]> out = new java.util.HashMap<>();
+            bySector.forEach((sector, rows) -> {
+                double[] med = new double[days];
+                double[] buf = new double[rows.size()];
+                for (int g = 0; g < days; g++) {
+                    int n = 0;
+                    for (double[] r : rows) if (!Double.isNaN(r[g])) buf[n++] = r[g];
+                    if (n == 0) { med[g] = Double.NaN; continue; }
+                    Arrays.sort(buf, 0, n);
+                    med[g] = n % 2 == 1 ? buf[n / 2] : (buf[n / 2 - 1] + buf[n / 2]) / 2;
+                }
+                out.put(sector, med);
+            });
+            return out;
+        });
+    }
 
     private static RuleSetService.Ctx ctx(Series s) {
         return CTX.computeIfAbsent(s, RuleSetService.Ctx::new);

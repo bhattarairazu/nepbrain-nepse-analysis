@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Listed shares')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: nav}"></header>
+<main>
+    <div class="page-head">
+        <div>
+            <h1>Listed shares</h1>
+            <p>Market cap needs each company's number of listed shares, which the daily price page does not show. This reads it from each
+                company's public ShareSansar page, one page every <b th:text="${delay}"></b> seconds. Shares change with bonus and right
+                issues, so run it about once a month; only companies older than 30 days are read again.</p>
+        </div>
+    </div>
+    <div th:if="${message != null}" class="flash STORED" th:text="${message}"></div>
+
+    <section th:replace="~{fragments/job :: status(${job})}"></section>
+
+    <section class="card block">
+        <h2>Stored</h2>
+        <p th:if="${counts.isEmpty()}" class="muted">Nothing stored yet.</p>
+        <ul th:unless="${counts.isEmpty()}">
+            <li th:each="c : ${counts}"><b th:text="${c[1]}"></b> <span th:text="${c[0] == 'OK'} ? 'companies with listed shares' : (${c[0] == 'NOT_FOUND'} ? 'without a company page' : 'pages without a listed-shares figure')"></span>,
+                last read <span th:text="${#temporals.format(c[2], 'd MMM yyyy HH:mm')}"></span></li>
+        </ul>
+        <p><b th:text="${pending}"></b> traded companies to read now (missing or older than 30 days), about
+            <span th:text="${(pending * delay) / 60 + 1}"></span> minute(s).</p>
+        <form method="post" th:action="@{/data/shares/fetch}" style="display:flex;gap:8px;flex-wrap:wrap" th:unless="${job != null and job.running}">
+            <button class="btn primary" type="submit" th:disabled="${pending == 0}">Read listed shares</button>
+            <button class="btn sm" type="submit" name="everything" value="true">Read every company again</button>
+        </form>
+        <form method="post" th:action="@{/data/shares/stop}" th:if="${job != null and job.running}">
+            <button class="btn" type="submit">Stop</button>
+        </form>
+    </section>
+
+    <section class="card block" th:unless="${missing.isEmpty()}">
+        <h2>Without listed shares <span class="muted small" th:text="${missing.size()}"></span></h2>
+        <p class="sub">These have no market cap and are left out of the size groups.</p>
+        <p class="small"><span th:each="s, st : ${missing}"><a th:href="@{/stock/{s}(s=${s.symbol})}" th:text="${s.symbol}"></a><span th:unless="${st.last}">, </span></span></p>
+    </section>
+</main>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+</body>
+</html>
